@@ -1495,7 +1495,6 @@ NITFCollectSegmentInfo( NITFFile *psFile, int nFileHeaderLen, int nOffset, const
         psInfo->hAccess = NULL;
         strncpy( psInfo->szSegmentType, szType, sizeof(psInfo->szSegmentType) );
         psInfo->szSegmentType[sizeof(psInfo->szSegmentType)-1] = '\0';
-
         psInfo->nSegmentHeaderSize =
             atoi(NITFGetField(szTemp, psFile->pachHeader,
                               nOffset + 3 + iSegment * (nHeaderLenSize+nDataLenSize),
@@ -1512,6 +1511,66 @@ NITFCollectSegmentInfo( NITFFile *psFile, int nFileHeaderLen, int nOffset, const
             psInfo->nSegmentHeaderSize = 209;
         }
 
+        if( EQUAL(psInfo->szSegmentType,"DE") )
+        {
+            //char* aosList;
+            int nDESDataSize = psInfo->nSegmentHeaderSize + psInfo->nSegmentSize;
+            char* pachDESData  = (char *)(
+                VSI_MALLOC_VERBOSE( nDESDataSize + 1 ) );
+
+            if (pachDESData == NULL)
+            {
+                return;
+            }
+
+            if( VSIFSeekL( psFile->fp, psInfo->nSegmentHeaderStart,
+                          SEEK_SET ) != 0
+                || (int)( VSIFReadL( pachDESData, 1, nDESDataSize,
+                                                psFile->fp ) ) != nDESDataSize )
+            {
+                CPLError( CE_Failure, CPLE_FileIO,
+                          "Failed to read %d byte DES subheader from " CPL_FRMT_GUIB ".",
+                          nDESDataSize,
+                          psInfo->nSegmentHeaderStart );
+                CPLFree( pachDESData );
+                return;
+            }
+
+            pachDESData[nDESDataSize] = '\0';
+
+/* -------------------------------------------------------------------- */
+/*          Accumulate all the DES segments.                            */
+/* -------------------------------------------------------------------- */
+
+            char* pszBase64 = CPLBase64Encode( nDESDataSize, (const GByte *)pachDESData );
+            char* encodedDESData = pszBase64;
+            CPLFree(pszBase64);
+
+            CPLFree( pachDESData );
+            pachDESData = NULL;
+
+            if( encodedDESData == "" )
+            {
+                CPLError(CE_Failure, CPLE_AppDefined, "Failed to encode DES subheader data!");
+                return;
+            }
+
+            // The length of the DES subheader data plus a space is append to the beginning of the encoded
+            // string so that we can recover the actual length of the image subheader when we decode it.
+
+            char buffer[20];
+
+            //snprintf(buffer, sizeof(buffer), "%d", nDESDataSize);
+
+            char * desSubheaderStr = buffer;
+            strncat(desSubheaderStr, " ", 1);
+            strncat(desSubheaderStr, encodedDESData, sizeof(encodedDESData));
+            strncat(desSubheaderStr, "\0", 2);
+
+            printf("%s\n", desSubheaderStr);
+            //*aosList=desSubheaderStr;
+        }
+
         psInfo->nSegmentSize =
             CPLScanUIntBig(NITFGetField(szTemp,psFile->pachHeader,
                               nOffset + 3 + iSegment * (nHeaderLenSize+nDataLenSize)
@@ -1522,13 +1581,18 @@ NITFCollectSegmentInfo( NITFFile *psFile, int nFileHeaderLen, int nOffset, const
             CPLError(CE_Failure, CPLE_AppDefined, "Invalid segment size : %s", szTemp);
             return -1;
         }
-
+        
         psInfo->nSegmentHeaderStart = *pnNextData;
         psInfo->nSegmentStart = *pnNextData + psInfo->nSegmentHeaderSize;
 
         *pnNextData += (psInfo->nSegmentHeaderSize+psInfo->nSegmentSize);
         psFile->nSegmentCount++;
+
+
+
     }
+    
+    
 
     return nOffset + nSegDefSize + 3;
 }
@@ -1688,7 +1752,6 @@ void NITFExtractMetadata( char ***ppapszMetadata, const char *pachHeader,
 
     memcpy( pszWork, pachHeader + nStart, nLength );
     pszWork[nLength] = '\0';
-
     *ppapszMetadata = CSLSetNameValue( *ppapszMetadata, pszName, pszWork );
 
     if (szWork != pszWork)
@@ -2027,6 +2090,79 @@ int NITFCollectAttachments( NITFFile *psFile )
             psSegInfo->nLOC_C = atoi(NITFGetField(szTemp,achSubheader,
                                                   nSTYPEOffset + 25, 5));
         }
+        else if (strcmp(psSegInfo->szSegmentType, "DE") == 0)
+        {
+            
+            NITFDES *psDES;
+            psDES = NITFDESAccess( psFile, iSegment );
+            char szTREName[7];
+            int nThisTRESize;
+            int nRPFDESOffset = -1;
+            if( psDES == NULL )
+            {
+                printf( "NITFDESAccess(%d) failed!\n", iSegment );
+                continue;
+            }
+
+            printf( "DE Segment %d:\n", iSegment + 1 );
+            printf("NITF_DESSHL=%s\n",CSLFetchNameValue( psDES->papszMetadata, "NITF_DESSHL" ));
+            printf("NITF_DESID=%s\n", CSLFetchNameValue(psDES->papszMetadata, "NITF_DESID")  );
+            printf("NITF_DESVER=%s\n", CSLFetchNameValue(psDES->papszMetadata, "NITF_DESVER")  );
+            printf("NITF_DECLAS=%s\n", CSLFetchNameValue(psDES->papszMetadata, "NITF_DECLAS")  );
+            printf("NITF_DESCLSY=%s\n", CSLFetchNameValue(psDES->papszMetadata, "NITF_DESCLSY")  );
+            printf("NITF_DESCODE=%s\n", CSLFetchNameValue(psDES->papszMetadata, "NITF_DESCODE")  );
+            printf("NITF_DESCTLH=%s\n", CSLFetchNameValue(psDES->papszMetadata, "NITF_DESCTLH")  );
+            printf("NITF_DESREL=%s\n", CSLFetchNameValue(psDES->papszMetadata, "NITF_DESREL")  );
+            printf("NITF_DESDCTP=%s\n", CSLFetchNameValue(psDES->papszMetadata, "NITF_DESDCTP")  );
+            printf("NITF_DESDCDT=%s\n", CSLFetchNameValue(psDES->papszMetadata, "NITF_DESDCDT")  );
+            printf("NITF_DESDCXM=%s\n", CSLFetchNameValue(psDES->papszMetadata, "NITF_DESDCXM")  );
+            printf("NITF_DESDGDT=%s\n", CSLFetchNameValue(psDES->papszMetadata, "NITF_DESDGDT")  );
+            printf("NITF_DESCLTX=%s\n", CSLFetchNameValue(psDES->papszMetadata, "NITF_DESCLTX")  );
+            printf("NITF_DESCATP=%s\n", CSLFetchNameValue(psDES->papszMetadata, "NITF_DESCATP")  );
+            printf("NITF_DESCAUT=%s\n", CSLFetchNameValue(psDES->papszMetadata, "NITF_DESCAUT")  );
+            printf("NITF_DESCRSN=%s\n", CSLFetchNameValue(psDES->papszMetadata, "NITF_DESCRSN")  );
+            printf("NITF_DESSRDT=%s\n", CSLFetchNameValue(psDES->papszMetadata, "NITF_DESSRDT")  );
+            printf("NITF_DESCTLN=%s\n", CSLFetchNameValue(psDES->papszMetadata, "NITF_DESCTLN")  );
+            printf("NITF_DESID=%s\n", CSLFetchNameValue(psDES->papszMetadata, "NITF_DESID")  );
+            printf("NITF_ID=%s\n", CSLFetchNameValue(psDES->papszMetadata, "NITF_ID"));
+            printf("NITF_AISDLVL=%s\n", CSLFetchNameValue(psDES->papszMetadata, "NITF_AISDLVL")  );
+            printf("NITF_NUM_ASSOC_ELEM=%s\n", CSLFetchNameValue(psDES->papszMetadata, "NITF_NUM_ASSOC_ELEM")  );
+            printf("NITF_ASSOC_ELEM_ID=%s\n", CSLFetchNameValue(psDES->papszMetadata, "NITF_ASSOC_ELEM_ID_1")  );
+            printf("NITF_ASSOC_ELEM_ID=%s\n", CSLFetchNameValue(psDES->papszMetadata, "NITF_ASSOC_ELEM_ID_2")  );
+            printf("NITF_ASSOC_ELEM_ID=%s\n", CSLFetchNameValue(psDES->papszMetadata, "NITF_ASSOC_ELEM_ID_3")  );
+            printf("NITF_ASSOC_ELEM_ID=%s\n", CSLFetchNameValue(psDES->papszMetadata, "NITF_ASSOC_ELEM_ID_4")  );
+            printf("NITF_RESERVEDSUBH_LEN=%s\n", CSLFetchNameValue(psDES->papszMetadata, "NITF_RESERVEDSUBH_LEN")  );
+            printf("NITF_NUMAIS=%s\n", CSLFetchNameValue(psDES->papszMetadata, "NITF_NUMAIS")  );
+            printf("NITF_DESDATA=%s\n", CSLFetchNameValue(psDES->papszMetadata, "NITF_DESDATA"));
+            printf( "  Segment TREs:" );
+            int nOffset = 0;
+            printf("%s\n", psDES->pachHeader);
+            
+            while (NITFDESGetTRE( psDES, nOffset, szTREName, NULL, &nThisTRESize))
+            {
+                printf( " %6.6s(%d)", szTREName, nThisTRESize );
+                if (strcmp(szTREName, "RPFDES") == 0)
+                    nRPFDESOffset = nOffset + 11;
+                nOffset += 11 + nThisTRESize;
+            }
+            printf( "\n" );
+
+                char* pabyTREData = NULL;
+                nOffset = 0;
+                while (NITFDESGetTRE( psDES, nOffset, szTREName, &pabyTREData, &nThisTRESize))
+                {
+                    char* pszEscaped = CPLEscapeString( pabyTREData, nThisTRESize,
+                                                        CPLES_BackslashQuotable );
+                    printf( "  TRE '%6.6s' : %s\n", szTREName, pszEscaped);
+                    CPLFree(pszEscaped);
+
+                    nOffset += 11 + nThisTRESize;
+
+                    NITFDESFreeTREData(pabyTREData);
+                }
+            
+        }
+    
     }
 
     return TRUE;
@@ -2237,7 +2373,6 @@ static char** NITFGenericMetadataReadTREInternal(char **papszMD,
 
                 if (psOutXMLNode != NULL)
                 {
-                    puts("In XML Node");
                     //const char* pszVal = strchr(papszMD[(*pnMDSize) - 1], '=') + 1;
                     CPLXMLNode* psFieldNode;
                     CPLXMLNode* psNameNode;

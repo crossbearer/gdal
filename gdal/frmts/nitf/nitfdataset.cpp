@@ -2281,7 +2281,7 @@ CPLErr NITFDataset::_SetProjection(const char* _pszProjection)
     return CE_None;
 }
 
-#ifdef ESRI_BUILD
+
 /************************************************************************/
 /*                       InitializeNITFDESMetadata()                    */
 /************************************************************************/
@@ -2548,7 +2548,6 @@ void NITFDataset::InitializeNITFTREs()
             oSpecialMD.SetMetadata( aosList.List(), pszTREsDomain );
     }
 }
-#endif
 
 /************************************************************************/
 /*                       InitializeNITFMetadata()                        */

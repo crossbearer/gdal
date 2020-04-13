@@ -251,45 +251,45 @@
           <field name="SENSOR_TYPE" length="1" type="string"/>
           <field name="GROUND_REF_POINT_X" length="12" type="real" minval="-99999999.99" maxval="+99999999.99"/>
           <field name="GROUND_REF_POINT_Y" length="12" type="real" minval="-99999999.99" maxval="+99999999.99"/>
-          <field name="GROUND_REF_POINT_Z" length="12" type="float" minval="-99999999.99" maxval="+99999999.99"/>
+          <field name="GROUND_REF_POINT_Z" length="12" type="real" minval="-99999999.99" maxval="+99999999.99"/>
           <if cond="SENSOR_TYPE==S">
             <field name="DAY_FIRST_LINE_IMAGE" length="8" type="string" />
-            <field name="TIME_FIRST_LINE" length="15" type="float" minval="00000.000000000" maxval="86400.000000000"/>
-            <field name="TIME_IMAGE_DURATION" length="16" type="float" minval="-86400.000000000" maxval="86400.000000000"/>
+            <field name="TIME_FIRST_LINE" length="15" type="real" minval="00000.000000000" maxval="86400.000000000"/>
+            <field name="TIME_IMAGE_DURATION" length="16" type="real" minval="-86400.000000000" maxval="86400.000000000"/>
           </if>  
           <if cond="SENSOR_TYPE==F">
             <field name="TIME_STAMP_LOC" length="1" type="integer" minval="0" maxval="1"/>
             <if cond="TIME_STAMP_LOC==0">
               <field name="REFERENCE_FRAME_NUM" length="9" type="integer" minval="000000001" maxval="999999999"/>
               <field name="BASE_TIMESTAMP" length="24" type="string"/>
-              <field name="DT_MULTIPLIER" length="8" type="integer" minval="1" maxval="18446744073709551615"/>
-              <field name="DT_SIZE" length="1" type="integer" minval="1" maxval="8"/>
-              <field name="NUMBER_FRAMES" length="4" type="integer" minval="0" maxval="4294967295"/>
-              <field name="NUMBER_DT" length="4" type="integer" minval="0" maxval="4294967295"/>
-             <loop counter="NUMBER_DT" md_prefix="DT_%20_">
+              <field name="DT_MULTIPLIER" length="8" type="UINT" minval="1" maxval="18446744073709551615"/>
+              <field name="DT_SIZE" length="1" type="UINT" minval="1" maxval="8"/>
+              <field name="NUMBER_FRAMES" length="4" type="UINT" minval="0" maxval="4294967295"/>
+              <field name="NUMBER_DT" length="4" type="UINT" minval="0" maxval="4294967295"/>
+              <loop counter="NUMBER_DT" md_prefix="DT_%20_">
                 <if cond="DT_SIZE==1">
-                  <field name="DT" length="1" type="integer"/>
+                  <field name="DT" length="1" type="UINT"/>
                 </if>
                 <if cond="DT_SIZE==2">
-                  <field name="DT" length="2" type="integer"/>
+                  <field name="DT" length="2" type="UINT"/>
                 </if>
                 <if cond="DT_SIZE==3">
-                  <field name="DT" length="3" type="integer"/>
+                  <field name="DT" length="3" type="UINT"/>
                 </if>
                 <if cond="DT_SIZE==4">
-                  <field name="DT" length="4" type="integer"/>
+                  <field name="DT" length="4" type="UINT"/>
                 </if>
                 <if cond="DT_SIZE==5">
-                  <field name="DT" length="5" type="integer"/>
+                  <field name="DT" length="5" type="UINT"/>
                 </if>
                 <if cond="DT_SIZE==6">
-                  <field name="DT" length="6" type="integer"/>
+                  <field name="DT" length="6" type="UINT"/>
                 </if>
                 <if cond="DT_SIZE==7">
-                  <field name="DT" length="7" type="integer"/>
+                  <field name="DT" length="7" type="UINT"/>
                 </if>
                 <if cond="DT_SIZE==8">
-                  <field name="DT" length="8" type="intger"/>
+                  <field name="DT" length="8" type="UINT"/>
                 </if>
              </loop>   
            </if> 

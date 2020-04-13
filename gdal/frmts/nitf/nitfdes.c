@@ -58,9 +58,8 @@ NITFDES *NITFDESAccess( NITFFile *psFile, int iSegment )
 /* -------------------------------------------------------------------- */
     if( iSegment < 0 || iSegment >= psFile->nSegmentCount )
         return NULL;
-
+    
     psSegInfo = psFile->pasSegmentInfo + iSegment;
-
     if( !EQUAL(psSegInfo->szSegmentType,"DE") )
         return NULL;
 
@@ -76,7 +75,6 @@ NITFDES *NITFDESAccess( NITFFile *psFile, int iSegment )
                     "DES header too small");
         return NULL;
     }
-
     pachHeader = (char*) VSI_MALLOC_VERBOSE(psSegInfo->nSegmentHeaderSize);
     if (pachHeader == NULL)
     {
@@ -154,6 +152,7 @@ retry:
     GetMD(  1, DESCRSN );
     GetMD(  8, DESSRDT );
     GetMD( 15, DESCTLN );
+    
 
     /* Load DESID */
     NITFGetField( szDESID, pachHeader, 2, 25);
@@ -190,7 +189,7 @@ retry:
 
     GetMD( 4, DESSHL );
     nDESSHL = atoi(CSLFetchNameValue( psDES->papszMetadata, "NITF_DESSHL" ) );
-
+    
     if (nDESSHL < 0)
     {
         CPLError(CE_Failure, CPLE_AppDefined,
@@ -261,8 +260,18 @@ retry:
         GetMD( 13, T0_ATT );
         GetMD( 5, NUM_ATT );
     }
-    else if (nDESSHL > 0)
-        GetMD(  nDESSHL, DESSHF );
+    else if (nDESSHL > 0){
+    //    GetMD(  nDESSHL, DESSHF );
+        GetMD( 36, ID);
+        GetMD(  3, NUMAIS);
+        GetMD(  3, AISDLVL);
+        GetMD(  3, NUM_ASSOC_ELEM);
+        GetMD( 36, ASSOC_ELEM_ID_1);
+        GetMD( 36, ASSOC_ELEM_ID_2);
+        GetMD( 36, ASSOC_ELEM_ID_3);
+        GetMD( 36, ASSOC_ELEM_ID_4);
+        GetMD(  4, RESERVEDSUBH_LEN);
+    }
 
     if ((int)psSegInfo->nSegmentHeaderSize > nOffset)
     {
