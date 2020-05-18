@@ -10429,7 +10429,7 @@ CPLErr GTiffDataset::IBuildOverviews(
 
     // Make implicit JPEG overviews invisible, but do not destroy
     // them in case they are already used (not sure that the client
-    // has the right to do that.  Behaviour maybe undefined in GDAL API.
+    // has the right to do that.  Behavior maybe undefined in GDAL API.
     m_nJPEGOverviewCount = 0;
 
 /* -------------------------------------------------------------------- */
@@ -11341,7 +11341,7 @@ static void WriteMDMetadata( GDALMultiDomainMetadata *poMDMD, TIFF *hTIFF,
                     else if( bFoundTag &&
                              asTIFFTags[iTag].eType == GTIFFTAGTYPE_BYTE_STRING )
                     {
-                        int nLen = static_cast<int>(strlen(pszItemValue));
+                        uint32 nLen = static_cast<uint32>(strlen(pszItemValue));
                         if( nLen )
                         {
                             TIFFSetField( hTIFF, asTIFFTags[iTag].nTagVal,
@@ -11691,6 +11691,33 @@ bool GTiffDataset::WriteMetadata( GDALDataset *poSrcDS, TIFF *l_hTIFF,
                                     poBand->GetColorInterpretation()),
                                 nBand,
                                 "colorinterp", "" );
+        }
+    }
+
+    const char* pszTilingSchemeName =
+        CSLFetchNameValue(l_papszCreationOptions, "@TILING_SCHEME_NAME");
+    if( pszTilingSchemeName )
+    {
+        AppendMetadataItem( &psRoot, &psTail,
+                            "NAME", pszTilingSchemeName,
+                            0, nullptr, "TILING_SCHEME" );
+
+        const char* pszZoomLevel = CSLFetchNameValue(
+            l_papszCreationOptions, "@TILING_SCHEME_ZOOM_LEVEL");
+        if( pszZoomLevel )
+        {
+            AppendMetadataItem( &psRoot, &psTail,
+                                "ZOOM_LEVEL", pszZoomLevel,
+                                0, nullptr, "TILING_SCHEME" );
+        }
+
+        const char* pszAlignedLevels = CSLFetchNameValue(
+            l_papszCreationOptions, "@TILING_SCHEME_ALIGNED_LEVELS");
+        if( pszAlignedLevels )
+        {
+            AppendMetadataItem( &psRoot, &psTail,
+                                "ALIGNED_LEVELS", pszAlignedLevels,
+                                0, nullptr, "TILING_SCHEME" );
         }
     }
 
@@ -12663,7 +12690,7 @@ static void GTiffDatasetSetAreaOrPointMD( GTIF* hGTIF,
                                           GDALMultiDomainMetadata& m_oGTiffMDMD )
 {
     // Is this a pixel-is-point dataset?
-    short nRasterType = 0;
+    unsigned short nRasterType = 0;
 
     if( GDALGTIFKeyGetSHORT(hGTIF, GTRasterTypeGeoKey, &nRasterType,
                     0, 1 ) == 1 )
@@ -13244,8 +13271,11 @@ void GTiffDataset::LoadICCProfile()
         if( TIFFGetField(m_hTIFF, TIFFTAG_WHITEPOINT, &pWP) )
         {
             if( !TIFFGetFieldDefaulted( m_hTIFF, TIFFTAG_TRANSFERFUNCTION, &pTFR,
-                                        &pTFG, &pTFB) )
+                                        &pTFG, &pTFB) ||
+                pTFR == nullptr || pTFG == nullptr || pTFB == nullptr )
+            {
                 return;
+            }
 
             const int TIFFTAG_TRANSFERRANGE = 0x0156;
             TIFFGetFieldDefaulted( m_hTIFF, TIFFTAG_TRANSFERRANGE,
@@ -14592,7 +14622,7 @@ void GTiffDataset::LoadGeoreferencingAndPamIfNeeded()
         double *padfMatrix = nullptr;
         uint16 nCount = 0;
         bool bPixelIsPoint = false;
-        short nRasterType = 0;
+        unsigned short nRasterType = 0;
         bool bPointGeoIgnore = false;
 
         std::set<signed char> aoSetPriorities;
@@ -14653,7 +14683,7 @@ void GTiffDataset::LoadGeoreferencingAndPamIfNeeded()
                                 "specification, assumes that the file "
                                 "was intended to be north-up, and will "
                                 "treat this file as if ScaleY was "
-                                "positive. You may override this behaviour "
+                                "positive. You may override this behavior "
                                 "by setting the GTIFF_HONOUR_NEGATIVE_SCALEY "
                                 "configuration option to YES");
                             m_adfGeoTransform[5] = padfScale[1];
@@ -15123,6 +15153,44 @@ void GTiffDataset::ScanDirectories()
             TIFFGetField( m_hTIFF, TIFFTAG_IMAGEWIDTH, &nXSize );
             TIFFGetField( m_hTIFF, TIFFTAG_IMAGELENGTH, &nYSize );
 
+            // For Geodetic TIFF grids (GTG)
+            // (https://proj.org/specifications/geodetictiffgrids.html)
+            // extract the grid_name to put it in the description
+            std::string osFriendlyName;
+            char* pszText = nullptr;
+            if( TIFFGetField( m_hTIFF, TIFFTAG_GDAL_METADATA, &pszText ) &&
+                strstr(pszText, "grid_name") != nullptr )
+            {
+                CPLXMLNode *psRoot = CPLParseXMLString( pszText );
+                CPLXMLNode *psItem = nullptr;
+
+                if( psRoot != nullptr && psRoot->eType == CXT_Element
+                    && EQUAL(psRoot->pszValue,"GDALMetadata") )
+                    psItem = psRoot->psChild;
+
+                for( ; psItem != nullptr; psItem = psItem->psNext )
+                {
+
+                    if( psItem->eType != CXT_Element
+                        || !EQUAL(psItem->pszValue,"Item") )
+                        continue;
+
+                    const char *pszKey = CPLGetXMLValue( psItem, "name", nullptr );
+                    const char *pszValue = CPLGetXMLValue( psItem, nullptr, nullptr );
+                    int nBand =
+                        atoi(CPLGetXMLValue( psItem, "sample", "-1" ));
+                    if( pszKey && pszValue && nBand <= 0 &&
+                        EQUAL(pszKey, "grid_name") )
+                    {
+                        osFriendlyName = ": ";
+                        osFriendlyName += pszValue;
+                        break;
+                    }
+                }
+
+                CPLDestroyXMLNode(psRoot);
+            }
+
             if( nXSize > INT_MAX || nYSize > INT_MAX )
             {
                 CPLDebug("GTiff",
@@ -15143,6 +15211,7 @@ void GTiffDataset::ScanDirectories()
                             static_cast<int>(nXSize),
                             static_cast<int>(nYSize),
                             nSPP );
+                osDesc += osFriendlyName;
 
                 aosSubdatasets.AddString(osName);
                 aosSubdatasets.AddString(osDesc);
@@ -19515,7 +19584,7 @@ static void GTiffTagExtender(TIFF *tif)
           TRUE, TRUE, const_cast<char *>( "RPCCoefficient" ) },
         { TIFFTAG_TIFF_RSID, -1, -1, TIFF_ASCII, FIELD_CUSTOM,
           TRUE, FALSE, const_cast<char *>( "TIFF_RSID" ) },
-        { TIFFTAG_GEO_METADATA, -1, -1, TIFF_BYTE, FIELD_CUSTOM,
+        { TIFFTAG_GEO_METADATA, TIFF_VARIABLE2, TIFF_VARIABLE2, TIFF_BYTE, FIELD_CUSTOM,
           TRUE, TRUE, const_cast<char *>( "GEO_METADATA" ) }
     };
 

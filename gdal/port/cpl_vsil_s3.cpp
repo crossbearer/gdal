@@ -991,10 +991,10 @@ size_t VSIS3WriteHandle::ReadCallBackBufferChunked( char *buffer, size_t size,
     }
     const size_t nSizeMax = size * nitems;
     size_t nSizeToWrite = nSizeMax;
-    size_t nChunckedBufferRemainingSize =
+    size_t nChunkedBufferRemainingSize =
                 poThis->m_nChunkedBufferSize - poThis->m_nChunkedBufferOff;
-    if( nChunckedBufferRemainingSize < nSizeToWrite )
-        nSizeToWrite = nChunckedBufferRemainingSize;
+    if( nChunkedBufferRemainingSize < nSizeToWrite )
+        nSizeToWrite = nChunkedBufferRemainingSize;
     memcpy(buffer,
            static_cast<const GByte*>(poThis->m_pBuffer) + poThis->m_nChunkedBufferOff,
            nSizeToWrite);
@@ -1414,7 +1414,7 @@ bool VSIS3WriteHandle::DoSinglePartPUT()
 
 bool IVSIS3LikeFSHandler::CompleteMultipart(const CPLString& osFilename,
                                             const CPLString& osUploadID,
-                                            const std::vector<CPLString> aosEtags,
+                                            const std::vector<CPLString>& aosEtags,
                                             IVSIS3LikeHandleHelper *poS3HandleHelper,
                                             int nMaxRetry,
                                             double dfRetryDelay)
@@ -1651,6 +1651,32 @@ VSIVirtualHandle* VSIS3FSHandler::Open( const char *pszFilename,
             poHandle = nullptr;
         }
         return poHandle;
+    }
+
+    if( CPLString(pszFilename).back() != '/' )
+    {
+        // If there's directory content for the directory where this file belongs to,
+        // use it to detect if the object does not exist
+        CachedDirList cachedDirList;
+        const CPLString osDirname(CPLGetDirname(pszFilename));
+        if( STARTS_WITH_CI(osDirname, GetFSPrefix()) &&
+            GetCachedDirList(osDirname, cachedDirList) && cachedDirList.bGotFileList )
+        {
+            const CPLString osFilenameOnly(CPLGetFilename(pszFilename));
+            bool bFound = false;
+            for( int i = 0; i < cachedDirList.oFileList.size(); i++ )
+            {
+                if( cachedDirList.oFileList[i] == osFilenameOnly )
+                {
+                    bFound = true;
+                    break;
+                }
+            }
+            if( !bFound )
+            {
+                return nullptr;
+            }
+        }
     }
 
     return
@@ -2446,6 +2472,34 @@ int IVSIS3LikeFSHandler::Stat( const char *pszFilename, VSIStatBufL *pStatBuf,
     CPLString osFilename(pszFilename);
     if( osFilename.find('/', GetFSPrefix().size()) == std::string::npos )
         osFilename += "/";
+
+    CPLString osFilenameWithoutSlash(osFilename);
+    if( osFilenameWithoutSlash.back() == '/' )
+        osFilenameWithoutSlash.resize(osFilenameWithoutSlash.size()-1);
+
+    // If there's directory content for the directory where this file belongs to,
+    // use it to detect if the object does not exist
+    CachedDirList cachedDirList;
+    const CPLString osDirname(CPLGetDirname(osFilenameWithoutSlash));
+    if( STARTS_WITH_CI(osDirname, GetFSPrefix()) &&
+        GetCachedDirList(osDirname, cachedDirList) && cachedDirList.bGotFileList )
+    {
+        const CPLString osFilenameOnly(CPLGetFilename(osFilenameWithoutSlash));
+        bool bFound = false;
+        for( int i = 0; i < cachedDirList.oFileList.size(); i++ )
+        {
+            if( cachedDirList.oFileList[i] == osFilenameOnly )
+            {
+                bFound = true;
+                break;
+            }
+        }
+        if( !bFound )
+        {
+            return -1;
+        }
+    }
+
     if( VSICurlFilesystemHandler::Stat(osFilename, pStatBuf, nFlags) == 0 )
     {
         return 0;
@@ -2668,17 +2722,17 @@ int IVSIS3LikeFSHandler::CopyObject( const char *oldpath, const char *newpath,
         if( papszMetadata && papszMetadata[0] )
         {
             headers = curl_slist_append(headers, "x-amz-metadata-directive: REPLACE");
-        }
-        for( int i = 0; papszMetadata && papszMetadata[i]; i++ )
-        {
-            char* pszKey = nullptr;
-            const char* pszValue = CPLParseNameValue(papszMetadata[i], &pszKey);
-            if( pszKey && pszValue )
+            for( int i = 0; papszMetadata[i]; i++ )
             {
-                headers = curl_slist_append(headers,
-                                            CPLSPrintf("%s: %s", pszKey, pszValue));
+                char* pszKey = nullptr;
+                const char* pszValue = CPLParseNameValue(papszMetadata[i], &pszKey);
+                if( pszKey && pszValue )
+                {
+                    headers = curl_slist_append(headers,
+                                                CPLSPrintf("%s: %s", pszKey, pszValue));
+                }
+                CPLFree(pszKey);
             }
-            CPLFree(pszKey);
         }
         headers = VSICurlMergeHeaders(headers,
                         poS3HandleHelper->GetCurlHeaders("PUT", headers));

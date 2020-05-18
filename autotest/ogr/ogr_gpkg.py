@@ -3059,15 +3059,15 @@ def test_ogr_gpkg_43():
     ds.CommitTransaction()
     ds = None
 
-    with gdaltest.error_handler():
-        ds = gdal.Open('/vsimem/ogr_gpkg_43.gpkg')
-    assert len(ds.GetMetadata_List('SUBDATASETS')) == 2 * 1000
-    ds = None
-    gdal.SetConfigOption('OGR_TABLE_LIMIT', '1000')
-    with gdaltest.error_handler():
-        ds = ogr.Open('/vsimem/ogr_gpkg_43.gpkg')
-    gdal.SetConfigOption('OGR_TABLE_LIMIT', None)
-    assert ds.GetLayerCount() == 1000
+    ds = gdal.OpenEx('/vsimem/ogr_gpkg_43.gpkg')
+    assert len(ds.GetMetadata_List('SUBDATASETS')) == 2 * 1001
+    assert ds.GetLayerCount() == 1001
+
+    with gdaltest.config_option('OGR_TABLE_LIMIT', '1000'):
+        with gdaltest.error_handler():
+            ds = gdal.OpenEx('/vsimem/ogr_gpkg_43.gpkg')
+            assert len(ds.GetMetadata_List('SUBDATASETS')) == 2 * 1000
+            assert ds.GetLayerCount() == 1000
     ds = None
 
     gdaltest.gpkg_dr.DeleteDataSource('/vsimem/ogr_gpkg_43.gpkg')
@@ -3454,7 +3454,7 @@ def test_ogr_gpkg_51():
     if gdaltest.gpkg_dr.GetMetadataItem("ENABLE_SQL_GPKG_FORMAT") != 'YES':
         pytest.skip()
 
-    ds = ogr.Open('data/poly.gpkg.sql')
+    ds = ogr.Open('data/gpkg/poly.gpkg.sql')
     lyr = ds.GetLayer(0)
     f = lyr.GetNextFeature()
     assert f is not None
@@ -3465,7 +3465,7 @@ def test_ogr_gpkg_51():
 
 def test_ogr_gpkg_52():
 
-    ds = ogr.Open('data/poly_non_conformant.gpkg')
+    ds = ogr.Open('data/gpkg/poly_non_conformant.gpkg')
     lyr = ds.GetLayer(0)
     with gdaltest.error_handler():
         f = lyr.GetNextFeature()
@@ -3480,7 +3480,7 @@ def test_ogr_gpkg_53():
     if gdaltest.gpkg_dr.GetMetadataItem("ENABLE_SQL_GPKG_FORMAT") != 'YES':
         pytest.skip()
 
-    ds = ogr.Open('data/poly_inconsistent_case.gpkg.sql')
+    ds = ogr.Open('data/gpkg/poly_inconsistent_case.gpkg.sql')
     assert ds.GetLayerCount() == 1
     lyr = ds.GetLayer(0)
     f = lyr.GetNextFeature()
@@ -3488,7 +3488,7 @@ def test_ogr_gpkg_53():
 
     import test_cli_utilities
     if test_cli_utilities.get_test_ogrsf_path() is not None:
-        ret = gdaltest.runexternal(test_cli_utilities.get_test_ogrsf_path() + ' data/poly_inconsistent_case.gpkg.sql')
+        ret = gdaltest.runexternal(test_cli_utilities.get_test_ogrsf_path() + ' data/gpkg/poly_inconsistent_case.gpkg.sql')
 
         assert ret.find('INFO') != -1 and ret.find('ERROR') == -1
 

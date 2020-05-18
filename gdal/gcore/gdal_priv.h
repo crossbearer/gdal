@@ -1572,7 +1572,8 @@ class CPL_DLL GDALDriver : public GDALMajorObject
                                            GDALProgressFunc pfnProgress,
                                            void * pProgressData );
 //! @endcond
-    static CPLErr       QuietDelete( const char * pszName );
+    static CPLErr       QuietDelete( const char * pszName,
+                                     const char *const *papszAllowedDrivers = nullptr);
 
 //! @cond Doxygen_Suppress
     static CPLErr       DefaultRename( const char * pszNewName,
@@ -2493,7 +2494,7 @@ public:
  * Class modeling a a dimension / axis used to index multidimensional arrays.
  * It has a name, a size (that is the number of values that can be indexed along
  * the dimension), a type (see GDALDimension::GetType()), a direction
- * (see GDALDimension::GetDirection()), a unit and can optionaly point to a GDALMDArray variable,
+ * (see GDALDimension::GetDirection()), a unit and can optionally point to a GDALMDArray variable,
  * typically one-dimensional, describing the values taken by the dimension.
  * For a georeferenced GDALMDArray and its X dimension, this will be typically
  * the values of the easting/longitude for each grid point.
@@ -2713,7 +2714,6 @@ void GDALNullifyOpenDatasetsList();
 CPLMutex** GDALGetphDMMutex();
 CPLMutex** GDALGetphDLMutex();
 void GDALNullifyProxyPoolSingleton();
-GDALDriver* GDALGetAPIPROXYDriver();
 void GDALSetResponsiblePIDForCurrentThread(GIntBig responsiblePID);
 GIntBig GDALGetResponsiblePIDForCurrentThread();
 
@@ -2744,7 +2744,7 @@ GDALDataset* GDALCreateOverviewDataset(GDALDataset* poDS, int nOvrLevel,
                                        int bThisLevelOnly);
 
 // Should cover particular cases of #3573, #4183, #4506, #6578
-// Behaviour is undefined if fVal1 or fVal2 are NaN (should be tested before
+// Behavior is undefined if fVal1 or fVal2 are NaN (should be tested before
 // calling this function)
 template<class T> inline bool ARE_REAL_EQUAL(T fVal1, T fVal2, int ulp = 2)
 {

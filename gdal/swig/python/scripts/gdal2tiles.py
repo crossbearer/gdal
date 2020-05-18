@@ -1179,7 +1179,7 @@ def optparse_init():
     p.add_option('-e', '--resume', dest="resume", action="store_true",
                  help="Resume mode. Generate only missing files.")
     p.add_option('-a', '--srcnodata', dest="srcnodata", metavar="NODATA",
-                 help="NODATA transparency value to assign to the input data")
+                 help="Value in the input dataset considered as transparent")
     p.add_option('-d', '--tmscompatible', dest="tmscompatible", action="store_true",
                  help=("When using the geodetic profile, specifies the base resolution "
                        "as 0.703125 or 2 tiles at zoom level 0."))
@@ -1199,9 +1199,9 @@ def optparse_init():
                  dest="nb_processes",
                  type='int',
                  help="Number of processes to use for tiling")
-    p.add_option("--tilesize", dest="tilesize", default=256,
+    p.add_option("--tilesize", dest="tilesize",  metavar="PIXELS", default=256,
                  type='int',
-                 help="Tile size in pixel of a tile")
+                 help="Width and height in pixel of a tile")
 
     # KML options
     g = OptionGroup(p, "KML (Google Earth) options",
@@ -1424,7 +1424,7 @@ class GDAL2Tiles(object):
         # Not for 'raster' profile
         self.scaledquery = True
         # How big should be query window be for scaling down
-        # Later on reset according the chosen resampling algorightm
+        # Later on reset according the chosen resampling algorithm
         self.querysize = 4 * self.tile_size
 
         # Should we use Read on the input file for generating overview tiles?
@@ -1602,7 +1602,7 @@ class GDAL2Tiles(object):
         self.omaxx = self.out_gt[0] + self.warped_input_dataset.RasterXSize * self.out_gt[1]
         self.omaxy = self.out_gt[3]
         self.ominy = self.out_gt[3] - self.warped_input_dataset.RasterYSize * self.out_gt[1]
-        # Note: maybe round(x, 14) to avoid the gdal_translate behaviour, when 0 becomes -1e-15
+        # Note: maybe round(x, 14) to avoid the gdal_translate behavior, when 0 becomes -1e-15
 
         if self.options.verbose:
             print("Bounds (output srs):", round(self.ominx, 13), self.ominy, self.omaxx, self.omaxy)
@@ -2980,6 +2980,8 @@ def main():
     # TODO: gbataille - debug intermediate tiles.vrt not produced anymore?
     # TODO: gbataille - Refactor generate overview tiles to not depend on self variables
     argv = gdal.GeneralCmdLineProcessor(sys.argv)
+    if argv is None:
+        return
     input_file, output_folder, options = process_args(argv[1:])
     nb_processes = options.nb_processes or 1
 

@@ -2033,7 +2033,13 @@ CPLErr GDALDataset::IRasterIO( GDALRWFlag eRWFlag,
 
     CPLAssert(nullptr != pData);
 
-    if (nXSize == nBufXSize && nYSize == nBufYSize && nBandCount > 1 &&
+    const bool bHasSubpixelShift =
+       psExtraArg->bFloatingPointWindowValidity &&
+       psExtraArg->eResampleAlg != GRIORA_NearestNeighbour &&
+       (nXOff != psExtraArg->dfXOff || nYOff != psExtraArg->dfYOff);
+
+    if (!bHasSubpixelShift &&
+        nXSize == nBufXSize && nYSize == nBufYSize && nBandCount > 1 &&
         (pszInterleave = GetMetadataItem("INTERLEAVE", "IMAGE_STRUCTURE")) !=
             nullptr &&
         EQUAL(pszInterleave, "PIXEL"))
@@ -2403,7 +2409,7 @@ CPLErr GDALDataset::ValidateRasterIOOrAdviseReadParameters(
  *
  * @param psExtraArg (new in GDAL 2.0) pointer to a GDALRasterIOExtraArg
  * structure with additional arguments to specify resampling and progress
- * callback, or NULL for default behaviour. The GDAL_RASTERIO_RESAMPLING
+ * callback, or NULL for default behavior. The GDAL_RASTERIO_RESAMPLING
  * configuration option can also be defined to override the default resampling
  * to one of BILINEAR, CUBIC, CUBICSPLINE, LANCZOS, AVERAGE or MODE.
  *
@@ -3097,9 +3103,6 @@ CPLErr CPL_STDCALL GDALCreateDatasetMaskBand( GDALDatasetH hDS, int nFlags )
  * .tar/.tar.gz/.tgz archive (see VSIInstallTarFileHandler()) or on a HTTP / FTP
  * server (see VSIInstallCurlFileHandler())
  *
- * In some situations (dealing with unverified data), the datasets can be opened
- * in another process through the \ref gdal_api_proxy mechanism.
- *
  * \sa GDALOpenShared()
  * \sa GDALOpenEx()
  *
@@ -3153,9 +3156,6 @@ GDALOpen( const char * pszFilename, GDALAccess eAccess )
  * file in a .zip archive (see VSIInstallZipFileHandler()), in a
  * .tar/.tar.gz/.tgz archive (see VSIInstallTarFileHandler()) or on a HTTP / FTP
  * server (see VSIInstallCurlFileHandler())
- *
- * In some situations (dealing with unverified data), the datasets can be opened
- * in another process through the \ref gdal_api_proxy mechanism.
  *
  * In order to reduce the need for searches through the operating system
  * file system machinery, it is possible to give an optional list of files with
@@ -3221,7 +3221,6 @@ GDALDatasetH CPL_STDCALL GDALOpenEx( const char *pszFilename,
                                      const char *const *papszSiblingFiles )
 {
     VALIDATE_POINTER1(pszFilename, "GDALOpen", nullptr);
-
 /* -------------------------------------------------------------------- */
 /*      In case of shared dataset, first scan the existing list to see  */
 /*      if it could already contain the requested dataset.              */
@@ -3311,21 +3310,14 @@ GDALDatasetH CPL_STDCALL GDALOpenEx( const char *pszFilename,
     oOpenInfo.papszOpenOptions = papszOpenOptionsCleaned;
 
     const int nDriverCount = poDM->GetDriverCount();
-    for( int iDriver = -1; iDriver < nDriverCount; ++iDriver )
+    for( int iDriver = 0; iDriver < nDriverCount; ++iDriver )
     {
-        GDALDriver *poDriver = nullptr;
-
-        if( iDriver < 0 )
+        GDALDriver *poDriver = poDM->GetDriver(iDriver);
+        if (papszAllowedDrivers != nullptr &&
+            CSLFindString(papszAllowedDrivers,
+                            GDALGetDriverShortName(poDriver)) == -1)
         {
-            poDriver = GDALGetAPIPROXYDriver();
-        }
-        else
-        {
-            poDriver = poDM->GetDriver(iDriver);
-            if (papszAllowedDrivers != nullptr &&
-                CSLFindString(papszAllowedDrivers,
-                              GDALGetDriverShortName(poDriver)) == -1)
-                continue;
+            continue;
         }
 
         if( (nOpenFlags & GDAL_OF_RASTER) != 0 &&
@@ -3566,9 +3558,6 @@ GDALDatasetH CPL_STDCALL GDALOpenEx( const char *pszFilename,
  * file in a .zip archive (see VSIInstallZipFileHandler()), in a
  * .tar/.tar.gz/.tgz archive (see VSIInstallTarFileHandler()) or on a HTTP / FTP
  * server (see VSIInstallCurlFileHandler())
- *
- * In some situations (dealing with unverified data), the datasets can be opened
- * in another process through the \ref gdal_api_proxy mechanism.
  *
  * \sa GDALOpen()
  * \sa GDALOpenEx()

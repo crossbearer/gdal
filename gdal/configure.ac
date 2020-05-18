@@ -1090,6 +1090,25 @@ AC_DEFINE_UNQUOTED(HAVE_SC_PHYS_PAGES, 1,
 AC_MSG_RESULT([no])
 ])
 
+dnl '---------------------------------------------------------------------------
+dnl Remove possible system library paths from a *_LIB variable to prevent other, perhaps unrelated, system libraries
+dnl from shadowing custom libraries of the same name the user might have installed e.g. under /usr/local.
+dnl System library paths are things like /lib, /usr/lib, /lib64, /usr/lib64, and /usr/lib/x86_64-linux-gnu.
+dnl There may be others as well, that will need be addressed as they arise. We avoid wildcards such as
+dnl /usr/lib/* to avoid potential cases such as /usr/lib/mysql/lib, which might not have an /etc/ld.so.conf.d
+dnl entry and would not shadow any possible custom installs anyway:
+
+AC_DEFUN([STRIP_SYSTEM_LIBRARY_PATHS],[
+    if echo "x" | sed -E "s/x/y/" >/dev/null 2>/dev/null; then
+        STRIPPED_LIBRARY_NAME="$(echo [$1] | sed -E 's:-L/(usr/)?(lib(64)?|lib/x86_64-linux-gnu)/*[[[:space:]]]+::')"
+    elif echo "x" | sed -r "s/x/y/" >/dev/null 2>/dev/null; then
+        dnl Compatibility with older GNU sed that doesn't support -E
+        STRIPPED_LIBRARY_NAME="$(echo [$1] | sed -r 's:-L/(usr/)?(lib(64)?|lib/x86_64-linux-gnu)/*[[[:space:]]]+::')"
+    else
+        STRIPPED_LIBRARY_NAME="$(echo [$1])"
+    fi
+])
+
 dnl ---------------------------------------------------------------------------
 dnl Check if libz is available.
 dnl ---------------------------------------------------------------------------
@@ -1154,7 +1173,7 @@ dnl ---------------------------------------------------------------------------
 AM_ICONV
 
 dnl Extra test needed for GCC 4.5 on Solaris 11, where there is
-dnl a different behaviour if the tests are compiled with gcc or g++.
+dnl a different behavior if the tests are compiled with gcc or g++.
 dnl So we introduce a ICONV_CPP_CONST that must be used instead of
 dnl ICONV_CONST when used from .cpp files.
 if test "$am_func_iconv" = "yes"; then
@@ -1372,7 +1391,7 @@ OGRFORMATS_DISABLED=
 
 AC_DEFUN([INTERNAL_FORMATS],[aaigrid adrg aigrid airsar arg blx bmp bsb cals ceos ceos2 coasp cosar ctg dimap dted e00grid elas envisat ers fit gff gsg gxf hf2 idrisi ignfheightasciigrid ilwis ingr iris iso8211 jaxapalsar jdem kmlsuperoverlay l1b leveller map mrf msgn ngsgeoid nitf northwood pds prf r raw rmf rs2 safe saga sdts sentinel2 sgi sigdem srtmhgt terragen til tsx usgsdem xpm xyz zmap])
 AC_DEFUN([INTERNAL_OPT_FORMATS],[grib ozi pdf rik])
-AC_DEFUN([INTERNAL_DRIVERS],[aeronavfaa arcgen avc bna cad csv dgn dxf edigeo flatgeobuf geoconcept georss gml gmt gpsbabel gpx gtm htf jml mvt ntf openair openfilegdb pgdump rec s57 segukooa segy selafin shape sua svg sxf tiger vdv wasp xplane])dnl
+AC_DEFUN([INTERNAL_DRIVERS],[aeronavfaa arcgen avc bna cad csv dgn dxf edigeo flatgeobuf geoconcept georss gml gmt gpsbabel gpx gtm htf jml mapml mvt ntf openair openfilegdb pgdump rec s57 segukooa segy selafin shape sua svg sxf tiger vdv wasp xplane])dnl
 AC_DEFUN([CURL_FORMATS],[eeda plmosaic rda wcs wms wmts daas])dnl
 AC_DEFUN([CURL_DRIVERS],[amigocloud carto cloudant couchdb csw elastic ngw plscenes wfs])dnl
 AC_DEFUN([SQLITE_FORMATS],[rasterlite mbtiles])dnl
@@ -2170,7 +2189,7 @@ HAVE_CHARLS=no
 CHARLS_INC=
 
 if test "$with_charls" = "yes" -o "$with_charls" = "" ; then
-
+  dnl CharLS 1.x
   AC_CHECK_HEADERS([CharLS/interface.h])
   if test "$ac_cv_header_CharLS_interface_h" = "yes"; then
     AC_CHECK_LIB(CharLS,JpegLsDecode,HAVE_CHARLS=yes)
@@ -2179,6 +2198,7 @@ if test "$with_charls" = "yes" -o "$with_charls" = "" ; then
         CHARLS_INC="-DCHARLS_INTERFACE_H"
     fi
   else
+    dnl CharLS 2.0
     AC_CHECK_HEADERS([CharLS/charls.h])
     if test "$ac_cv_header_CharLS_charls_h" = "yes"; then
         AC_LANG_PUSH([C++])
@@ -2187,6 +2207,18 @@ if test "$with_charls" = "yes" -o "$with_charls" = "" ; then
         if test "$HAVE_CHARLS" = "yes"; then
             LIBS="-lCharLS $LIBS"
             CHARLS_INC="-DCHARLS_2"
+        fi
+    else
+        dnl CharLS 2.1
+        AC_CHECK_HEADERS([charls/charls.h])
+        if test "$ac_cv_header_charls_charls_h" = "yes"; then
+            AC_LANG_PUSH([C++])
+            AC_CHECK_LIB(charls,JpegLsDecode,HAVE_CHARLS=yes)
+            AC_LANG_POP([C++])
+            if test "$HAVE_CHARLS" = "yes"; then
+                LIBS="-lcharls $LIBS"
+                CHARLS_INC="-DCHARLS_2_1"
+            fi
         fi
     fi
   fi
@@ -2906,6 +2938,8 @@ else
     NETCDF_PREFIX=`$NETCDF_NCCONFIG --prefix`
     NETCDF_INCLUDEDIR=`$NETCDF_NCCONFIG --includedir`
     NETCDF_LIBS=`$NETCDF_NCCONFIG --libs`
+    STRIP_SYSTEM_LIBRARY_PATHS("${NETCDF_LIBS}")
+    NETCDF_LIBS="$STRIPPED_LIBRARY_NAME"
     echo ""
     AC_MSG_RESULT([ got version="$NETCDF_VERSION", prefix="$NETCDF_PREFIX",
  libs="$NETCDF_LIBS", includedir="$NETCDF_INCLUDEDIR"])
@@ -2918,7 +2952,7 @@ else
       LIBS="$NETCDF_LIBS $LIBS"
     fi
 
-dnl previous behaviour without nc-config
+dnl previous behavior without nc-config
 
 dnl test linking using default settings
 elif test "$with_netcdf" = "yes" -o "$with_netcdf" = "" ; then
@@ -3717,6 +3751,8 @@ else
   else
       HAVE_MYSQL=yes
       MYSQL_LIB="`$MYSQL_CONFIG --libs`"
+      STRIP_SYSTEM_LIBRARY_PATHS("${MYSQL_LIB}")
+      MYSQL_LIB="$STRIPPED_LIBRARY_NAME"
       MYSQL_INC="`$MYSQL_CONFIG --include`"
       AC_MSG_RESULT([yes])
   fi
@@ -4115,7 +4151,7 @@ AC_ARG_WITH(spatialite,
     ,,)
 
 AC_ARG_WITH(spatialite-soname,
-    [  --with-spatialite-soname=ARG Spatialite shared object name (e.g. libspatialite.so), only used if --with-spatiliate=dlopen],
+    [  --with-spatialite-soname=ARG Spatialite shared object name (e.g. libspatialite.so), only used if --with-spatialite=dlopen],
     ,,)
 
 HAVE_SPATIALITE=no
@@ -4129,10 +4165,10 @@ elif test "$with_spatialite" = "yes"; then
         AC_MSG_CHECKING([for spatialite.h in /usr/include or /usr/local/include])
         if test -f "/usr/include/spatialite.h" -o -f "/usr/local/include/spatialite.h"; then
             AC_MSG_RESULT(found)
-            AC_CHECK_LIB(spatialite,spatialite_init,SPATIALITE_INIT_FOUND=yes,SPATIALITE_INIT_FOUND=no,-lsqlite3 -lproj)
+            AC_CHECK_LIB(spatialite,spatialite_init,SPATIALITE_INIT_FOUND=yes,SPATIALITE_INIT_FOUND=no,-lsqlite3)
             if test "$SPATIALITE_INIT_FOUND" = "yes"; then
                 HAVE_SPATIALITE=yes
-                SPATIALITE_LIBS="-lspatialite -lsqlite3 -lproj"
+                SPATIALITE_LIBS="-lspatialite -lsqlite3"
                 LIBS="$LIBS $SPATIALITE_LIBS"
                 HAVE_SQLITE3=yes
             fi
@@ -4565,6 +4601,8 @@ HAVE_GEOS_RESULT="no"
 if test "${HAVE_GEOS}" = "yes" ; then
 
   AC_MSG_NOTICE([Using C API from GEOS $GEOS_VERSION])
+  STRIP_SYSTEM_LIBRARY_PATHS("${GEOS_LIBS}")
+  GEOS_LIBS="$STRIPPED_LIBRARY_NAME"
   LIBS="${GEOS_LIBS} ${LIBS}"
   HAVE_GEOS_RESULT="yes"
 fi
@@ -4578,6 +4616,8 @@ HAVE_SFCGAL_RESULT="no"
 if test "${HAVE_SFCGAL}" = "yes" ; then
 
   AC_MSG_NOTICE([Using C API from SFCGAL $SFCGAL_VERSION])
+  STRIP_SYSTEM_LIBRARY_PATHS("${SFCGAL_LIBS}")
+  SFCGAL_LIBS="$STRIPPED_LIBRARY_NAME"
   LIBS="${SFCGAL_LIBS} ${LIBS}"
   HAVE_SFCGAL_RESULT="yes"
 fi
