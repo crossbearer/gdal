@@ -604,7 +604,9 @@ class CPL_DLL GDALDataset : public GDALMajorObject
     CPLErr BuildOverviews( const char *, int, int *,
                            int, int *, GDALProgressFunc, void * );
 
+#ifndef DOXYGEN_XML
     void ReportError(CPLErr eErrClass, CPLErrorNum err_no, const char *fmt, ...)  CPL_PRINT_FUNC_FORMAT (4, 5);
+#endif
 
     char ** GetMetadata(const char * pszDomain = "") override;
 
@@ -612,14 +614,14 @@ class CPL_DLL GDALDataset : public GDALMajorObject
 #ifdef DOXYGEN_SKIP
     CPLErr      SetMetadata( char ** papszMetadata,
                              const char * pszDomain ) override;
-    const char *GetMetadataItem( const char * pszName,
-                                 const char * pszDomain ) override;
     CPLErr      SetMetadataItem( const char * pszName,
                                  const char * pszValue,
                                  const char * pszDomain ) override;
 #endif
 
     char **GetMetadataDomainList() override;
+
+    virtual void ClearStatistics();
 
     /** Convert a GDALDataset* to a GDALDatasetH.
      * @since GDAL 2.3
@@ -864,7 +866,7 @@ struct CPL_DLL GDALDatasetUniquePtrDeleter
  * reference counter has not been manually modified.
  * @since GDAL 2.3
  */
-typedef std::unique_ptr<GDALDataset, GDALDatasetUniquePtrDeleter> GDALDatasetUniquePtr;
+using GDALDatasetUniquePtr = std::unique_ptr<GDALDataset, GDALDatasetUniquePtrDeleter>;
 
 /* ******************************************************************** */
 /*                           GDALRasterBlock                            */
@@ -1252,11 +1254,8 @@ class CPL_DLL GDALRasterBand : public GDALMajorObject
 
 // Only defined when Doxygen enabled
 #ifdef DOXYGEN_SKIP
-    char      **GetMetadata( const char * pszDomain = "" ) override;
     CPLErr      SetMetadata( char ** papszMetadata,
                              const char * pszDomain ) override;
-    const char *GetMetadataItem( const char * pszName,
-                                 const char * pszDomain ) override;
     CPLErr      SetMetadataItem( const char * pszName,
                                  const char * pszValue,
                                  const char * pszDomain ) override;
@@ -2005,6 +2004,14 @@ public:
                                         const std::string& osFullName,
                                         CSLConstList papszOptions = nullptr) const;
 
+    std::shared_ptr<GDALMDArray> ResolveMDArray(const std::string& osName,
+                                                const std::string& osStartingPath,
+                                                CSLConstList papszOptions = nullptr) const;
+
+    std::shared_ptr<GDALGroup> OpenGroupFromFullname(
+                                        const std::string& osFullName,
+                                        CSLConstList papszOptions = nullptr) const;
+
     std::shared_ptr<GDALDimension> OpenDimensionFromFullname(
                                         const std::string& osFullName) const;
 
@@ -2333,6 +2340,12 @@ class CPL_DLL GDALMDArray: virtual public GDALAbstractMDArray, public GDALIHasAt
         return atInternal(indices, tail...);
     }
 
+    bool SetStatistics( GDALDataset* poDS,
+                        bool bApproxStats,
+                        double dfMin, double dfMax,
+                        double dfMean, double dfStdDev,
+                        GUInt64 nValidCount );
+
 protected:
 //! @cond Doxygen_Suppress
     GDALMDArray(const std::string& osParentName, const std::string& osName);
@@ -2408,6 +2421,20 @@ public:
     virtual std::shared_ptr<GDALMDArray> GetMask(CSLConstList papszOptions) const;
 
     virtual GDALDataset* AsClassicDataset(size_t iXDim, size_t iYDim) const;
+
+    virtual CPLErr GetStatistics( GDALDataset* poDS,
+                                  bool bApproxOK, bool bForce,
+                                  double *pdfMin, double *pdfMax,
+                                  double *pdfMean, double *padfStdDev,
+                                  GUInt64* pnValidCount,
+                                  GDALProgressFunc pfnProgress, void *pProgressData );
+
+    virtual bool ComputeStatistics( GDALDataset* poDS,
+                                    bool bApproxOK,
+                                    double *pdfMin, double *pdfMax,
+                                    double *pdfMean, double *pdfStdDev,
+                                    GUInt64* pnValidCount,
+                                    GDALProgressFunc, void *pProgressData );
 
 //! @cond Doxygen_Suppress
     static constexpr GUInt64 COPY_COST = 1000;
@@ -2608,13 +2635,15 @@ typedef CPLErr (*GDALResampleFunction)
                         double dfSrcXDelta,
                         double dfSrcYDelta,
                         GDALDataType eWrkDataType,
-                        void * pChunk,
-                        GByte * pabyChunkNodataMask,
+                        const void * pChunk,
+                        const GByte * pabyChunkNodataMask,
                         int nChunkXOff, int nChunkXSize,
                         int nChunkYOff, int nChunkYSize,
                         int nDstXOff, int nDstXOff2,
                         int nDstYOff, int nDstYOff2,
                         GDALRasterBand * poOverview,
+                        void** ppDstBuffer,
+                        GDALDataType* peDstBufferDataType,
                         const char * pszResampling,
                         int bHasNoData, float fNoDataValue,
                         GDALColorTable* poColorTable,
@@ -2623,29 +2652,6 @@ typedef CPLErr (*GDALResampleFunction)
 
 GDALResampleFunction GDALGetResampleFunction(const char* pszResampling,
                                                  int* pnRadius);
-
-#ifdef GDAL_ENABLE_RESAMPLING_MULTIBAND
-typedef CPLErr (*GDALResampleFunctionMultiBands)
-                      ( double dfXRatioDstToSrc,
-                        double dfYRatioDstToSrc,
-                        double dfSrcXDelta,
-                        double dfSrcYDelta,
-                        GDALDataType eWrkDataType,
-                        void * pChunk, int nBands,
-                        GByte * pabyChunkNodataMask,
-                        int nChunkXOff, int nChunkXSize,
-                        int nChunkYOff, int nChunkYSize,
-                        int nDstXOff, int nDstXOff2,
-                        int nDstYOff, int nDstYOff2,
-                        GDALRasterBand ** papoDstBands,
-                        const char * pszResampling,
-                        int bHasNoData, float fNoDataValue,
-                        GDALColorTable* poColorTable,
-                        GDALDataType eSrcDataType);
-
-GDALResampleFunctionMultiBands GDALGetResampleFunctionMultiBands(const char* pszResampling,
-                                                       int* pnRadius);
-#endif
 
 GDALDataType GDALGetOvrWorkDataType(const char* pszResampling,
                                         GDALDataType eSrcDataType);
@@ -2720,7 +2726,7 @@ GIntBig GDALGetResponsiblePIDForCurrentThread();
 CPLString GDALFindAssociatedFile( const char *pszBasename, const char *pszExt,
                                   CSLConstList papszSiblingFiles, int nFlags );
 
-CPLErr EXIFExtractMetadata(char**& papszMetadata,
+CPLErr CPL_DLL EXIFExtractMetadata(char**& papszMetadata,
                            void *fpL, int nOffset,
                            int bSwabflag, int nTIFFHEADER,
                            int& nExifOffset, int& nInterOffset, int& nGPSOffset);

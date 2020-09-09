@@ -40,6 +40,7 @@
 #include <cstdlib>
 
 #include <algorithm>
+#include <limits>
 
 CPL_CVSID("$Id$")
 
@@ -1194,7 +1195,7 @@ int GDALGeoPackageDataset::Open( GDALOpenInfo* poOpenInfo )
             if( STARTS_WITH(pszLine, "--") )
                 continue;
 
-            // Blacklist a few words tat might have security implications
+            // Reject a few words tat might have security implications
             // Basically we just want to allow CREATE TABLE and INSERT INTO
             if( CPLString(pszLine).ifind("ATTACH") != std::string::npos ||
                 CPLString(pszLine).ifind("DETACH") != std::string::npos ||
@@ -1302,6 +1303,14 @@ int GDALGeoPackageDataset::Open( GDALOpenInfo* poOpenInfo )
                     (m_nUserVersion % 10000) / 100,
                     m_nUserVersion % 100);
         }
+    }
+
+    const char* pszPreludeStatements = CSLFetchNameValue(
+        poOpenInfo->papszOpenOptions, "PRELUDE_STATEMENTS");
+    if( pszPreludeStatements )
+    {
+        if( SQLCommand(hDB, pszPreludeStatements) != OGRERR_NONE )
+            return FALSE;
     }
 
     /* Requirement 6: The SQLite PRAGMA integrity_check SQL command SHALL return “ok” */
@@ -1618,7 +1627,74 @@ int GDALGeoPackageDataset::Open( GDALOpenInfo* poOpenInfo )
         }
     }
 
+    if( eAccess == GA_Update )
+    {
+        FixupWrongRTreeTrigger();
+    }
+
     return bRet;
+}
+
+/************************************************************************/
+/*                    FixupWrongRTreeTrigger()                          */
+/************************************************************************/
+
+void GDALGeoPackageDataset::FixupWrongRTreeTrigger()
+{
+    SQLResult oResult;
+    SQLResultInit(&oResult);
+    CPL_IGNORE_RET_VAL(SQLQuery(hDB,
+        "SELECT name, sql FROM sqlite_master WHERE type = 'trigger' AND "
+        "NAME LIKE 'rtree_%_update3' AND sql LIKE '% AFTER UPDATE OF % ON %'",
+        &oResult));
+    if( oResult.nRowCount > 0 )
+    {
+        CPLDebug("GPKG", "Fixing incorrect trigger(s) related to RTree");
+    }
+    for ( int i = 0; i < oResult.nRowCount; i++ )
+    {
+        const char *pszName = SQLResultGetValue(&oResult, 0, i);
+        const char *pszSQL = SQLResultGetValue(&oResult, 1, i);
+        const char *pszPtr1 = strstr(pszSQL, " AFTER UPDATE OF ");
+        if( pszPtr1 )
+        {
+            const char* pszPtr = pszPtr1 + strlen(" AFTER UPDATE OF ");
+            // Skipping over geometry column name
+            while( *pszPtr == ' ' )
+                pszPtr++;
+            if( pszPtr[0] == '"' || pszPtr[0] == '\'' )
+            {
+                char chStringDelim = pszPtr[0];
+                pszPtr ++;
+                while( *pszPtr != '\0' && *pszPtr != chStringDelim )
+                {
+                    if( *pszPtr == '\\' && pszPtr[1] == chStringDelim )
+                        pszPtr += 2;
+                    else
+                        pszPtr += 1;
+                }
+                if( *pszPtr == chStringDelim )
+                    pszPtr++;
+            }
+            else
+            {
+                pszPtr ++;
+                while( *pszPtr != ' ' )
+                    pszPtr++;
+            }
+            if( *pszPtr == ' ' )
+            {
+                SQLCommand(hDB,
+                    ("DROP TRIGGER " + SQLEscapeName(pszName)).c_str());
+                CPLString newSQL;
+                newSQL.assign(pszSQL, pszPtr1 - pszSQL);
+                newSQL += " AFTER UPDATE";
+                newSQL += pszPtr;
+                SQLCommand(hDB, newSQL);
+            }
+        }
+    }
+    SQLResultFree(&oResult);
 }
 
 /************************************************************************/
@@ -2216,6 +2292,11 @@ bool GDALGeoPackageDataset::OpenRaster( const char* pszTableName,
                 m_usGPKGNull = static_cast<GUInt16>(dfGPKGNoDataValue);
                 if( m_eDT == GDT_Int16 && m_usGPKGNull > 32767 )
                     dfGPKGNoDataValue = -32768.0;
+                else if( m_eDT == GDT_Float32 )
+                {
+                    // Pick a value that is unlikely to be hit with offset & scale
+                    dfGPKGNoDataValue = -std::numeric_limits<float>::max();
+                }
                 poBand->SetNoDataValueInternal(dfGPKGNoDataValue);
             }
         }
@@ -2706,16 +2787,6 @@ OGRErr GDALGeoPackageDataset::UpdateGpkgContentsLastChange(
 /*                          IBuildOverviews()                           */
 /************************************************************************/
 
-static int GetFloorPowerOfTwo(int n)
-{
-    int p2 = 1;
-    while( (n = n >> 1) > 0 )
-    {
-        p2 <<= 1;
-    }
-    return p2;
-}
-
 CPLErr GDALGeoPackageDataset::IBuildOverviews(
                         const char * pszResampling,
                         int nOverviews, int * panOverviewList,
@@ -2805,28 +2876,9 @@ CPLErr GDALGeoPackageDataset::IBuildOverviews(
         int nMaxOvFactor = 0;
         for( int j = 0; j < m_nOverviewCount; j++ )
         {
-            GDALDataset* poODS = m_papoOverviewDS[j];
-
-            int nOvFactor = GDALComputeOvFactor(poODS->GetRasterXSize(),
-                                                GetRasterXSize(),
-                                                poODS->GetRasterYSize(),
-                                                GetRasterYSize());
-            if( GetRasterXSize() / panOverviewList[i] == poODS->GetRasterXSize() &&
-                GetRasterYSize() / panOverviewList[i] == poODS->GetRasterYSize() )
-            {
-                nOvFactor = panOverviewList[i];
-            }
-            else if( nOvFactor == GDALOvLevelAdjust2( panOverviewList[i],
-                                                      GetRasterXSize(),
-                                                      GetRasterYSize() ) )
-            {
-                nOvFactor = panOverviewList[i];
-            }
-            else if( nOvFactor > 64 &&
-                     std::abs(nOvFactor - GetFloorPowerOfTwo(nOvFactor+2)) <= 2 )
-            {
-                nOvFactor = GetFloorPowerOfTwo(nOvFactor+2);
-            }
+            auto poODS = m_papoOverviewDS[j];
+            const int nOvFactor = static_cast<int>(
+                0.5 + poODS->m_adfGeoTransform[1] / m_adfGeoTransform[1]);
 
             nMaxOvFactor = nOvFactor;
 
@@ -2848,26 +2900,10 @@ CPLErr GDALGeoPackageDataset::IBuildOverviews(
                 CPLString osOvrList;
                 for(int j=0;j<m_nOverviewCount;j++)
                 {
-                    GDALDataset* poODS = m_papoOverviewDS[j];
+                    auto poODS = m_papoOverviewDS[j];
+                    const int nOvFactor = static_cast<int>(
+                        0.5 + poODS->m_adfGeoTransform[1] / m_adfGeoTransform[1]);
 
-                    /* Compute overview factor */
-                    int nOvFactor = (int)
-                        (0.5 + GetRasterXSize() / (double) poODS->GetRasterXSize());
-                    int nODSXSize = (int)(0.5 + GetRasterXSize() / (double) nOvFactor);
-                    if( nODSXSize != poODS->GetRasterXSize() )
-                    {
-                        int nOvFactorPowerOfTwo = GetFloorPowerOfTwo(nOvFactor);
-                        nODSXSize = (int)(0.5 + GetRasterXSize() / (double) nOvFactorPowerOfTwo);
-                        if( nODSXSize == poODS->GetRasterXSize() )
-                            nOvFactor = nOvFactorPowerOfTwo;
-                        else
-                        {
-                            nOvFactorPowerOfTwo <<= 1;
-                            nODSXSize = (int)(0.5 + GetRasterXSize() / (double) nOvFactorPowerOfTwo);
-                            if( nODSXSize == poODS->GetRasterXSize() )
-                                nOvFactor = nOvFactorPowerOfTwo;
-                        }
-                    }
                     if( j != 0 )
                         osOvrList += " ";
                     osOvrList += CPLSPrintf("%d", nOvFactor);
@@ -2882,15 +2918,8 @@ CPLErr GDALGeoPackageDataset::IBuildOverviews(
                 if( jCandidate < 0 )
                     jCandidate = m_nOverviewCount;
 
-                int nOvXSize = GetRasterXSize() / nOvFactor;
-                int nOvYSize = GetRasterYSize() / nOvFactor;
-                if( nOvXSize < 8 || nOvYSize < 8)
-                {
-                    CPLError(CE_Failure, CPLE_NotSupported,
-                             "Too big overview factor : %d. Would result in a %dx%d overview",
-                             nOvFactor, nOvXSize, nOvYSize);
-                    return CE_Failure;
-                }
+                int nOvXSize = std::max(1, GetRasterXSize() / nOvFactor);
+                int nOvYSize = std::max(1, GetRasterYSize() / nOvFactor);
                 if( !(jCandidate == m_nOverviewCount && nOvFactor == 2 * nMaxOvFactor) &&
                     !m_bZoomOther )
                 {
@@ -3003,29 +3032,9 @@ CPLErr GDALGeoPackageDataset::IBuildOverviews(
             int j = 0;  // Used after for.
             for( ; j < m_nOverviewCount; j++ )
             {
-                GDALDataset* poODS = m_papoOverviewDS[j];
-
-                int nOvFactor =
-                    GDALComputeOvFactor(poODS->GetRasterXSize(),
-                                        GetRasterXSize(),
-                                        poODS->GetRasterYSize(),
-                                        GetRasterYSize());
-                if( GetRasterXSize() / panOverviewList[i] == poODS->GetRasterXSize() &&
-                    GetRasterYSize() / panOverviewList[i] == poODS->GetRasterYSize() )
-                {
-                    nOvFactor = panOverviewList[i];
-                }
-                else if( nOvFactor == GDALOvLevelAdjust2( panOverviewList[i],
-                                                        GetRasterXSize(),
-                                                        GetRasterYSize() ) )
-                {
-                    nOvFactor = panOverviewList[i];
-                }
-                else if( nOvFactor > 64 &&
-                        std::abs(nOvFactor - GetFloorPowerOfTwo(nOvFactor+2)) <= 2 )
-                {
-                    nOvFactor = GetFloorPowerOfTwo(nOvFactor+2);
-                }
+                auto poODS = m_papoOverviewDS[j];
+                const int nOvFactor = static_cast<int>(
+                    0.5 + poODS->m_adfGeoTransform[1] / m_adfGeoTransform[1]);
 
                 if( nOvFactor == panOverviewList[i] )
                 {
@@ -3860,6 +3869,8 @@ int GDALGeoPackageDataset::Create( const char * pszFilename,
     m_pszFilename = CPLStrdup(pszFilename);
     m_bNew = true;
     eAccess = GA_Update;
+    m_bDateTimeWithTZ = EQUAL(CSLFetchNameValueDef(
+        papszOptions, "DATETIME_FORMAT", "WITH_TZ"), "WITH_TZ");
 
     // for test/debug purposes only. true is the nominal value
     m_bPNGSupports2Bands = CPLTestBool(CPLGetConfigOption("GPKG_PNG_SUPPORTS_2BANDS", "TRUE"));
@@ -4844,7 +4855,7 @@ GDALDataset* GDALGeoPackageDataset::CreateCopy( const char *pszFilename,
     for( ; nZoomLevel < 25; nZoomLevel++ )
     {
         dfRes = poTS->dfPixelXSizeZoomLevel0 / (1 << nZoomLevel);
-        if( dfComputedRes > dfRes )
+        if( dfComputedRes > dfRes || fabs( dfComputedRes - dfRes ) / dfRes <= 1e-8 )
             break;
         dfPrevRes = dfRes;
     }
@@ -4857,21 +4868,20 @@ GDALDataset* GDALGeoPackageDataset::CreateCopy( const char *pszFilename,
         return nullptr;
     }
 
-    const char* pszZoomLevelStrategy = CSLFetchNameValueDef(papszOptions,
-                                                            "ZOOM_LEVEL_STRATEGY",
-                                                            "AUTO");
-    if( fabs( dfComputedRes - dfRes ) / dfRes > 1e-8 )
+    if( nZoomLevel > 0 && fabs( dfComputedRes - dfRes ) / dfRes > 1e-8 )
     {
+        const char* pszZoomLevelStrategy = CSLFetchNameValueDef(papszOptions,
+                                                                "ZOOM_LEVEL_STRATEGY",
+                                                                "AUTO");
         if( EQUAL(pszZoomLevelStrategy, "LOWER") )
         {
-            if( nZoomLevel > 0 )
-                nZoomLevel --;
+            nZoomLevel --;
         }
         else if( EQUAL(pszZoomLevelStrategy, "UPPER") )
         {
             /* do nothing */
         }
-        else if( nZoomLevel > 0 )
+        else
         {
             if( dfPrevRes / dfComputedRes < dfComputedRes / dfRes )
                 nZoomLevel --;

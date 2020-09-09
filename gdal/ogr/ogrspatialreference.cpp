@@ -1619,7 +1619,7 @@ OGRErr OSRExportToWktEx( OGRSpatialReferenceH hSRS,
 /**
  * Convert this SRS into a PROJJSON string.
  *
- * Note that the returned WKT string should be freed with
+ * Note that the returned JSON string should be freed with
  * CPLFree() when no longer needed.  It is the responsibility of the caller.
  *
  * @param ppszResult the resulting string is returned in this pointer.
@@ -7654,6 +7654,7 @@ OGRSpatialReference::GetAuthorityCode( const char *pszTargetKey ) const
 
 {
     d->refreshProjObj();
+    const char* pszInputTargetKey = pszTargetKey;
     pszTargetKey = d->nullifyTargetKeyIfPossible(pszTargetKey);
     if( pszTargetKey == nullptr )
     {
@@ -7663,8 +7664,28 @@ OGRSpatialReference::GetAuthorityCode( const char *pszTargetKey ) const
         }
         d->demoteFromBoundCRS();
         auto ret = proj_get_id_code(d->m_pj_crs, 0);
+        if( ret == nullptr && d->m_pjType == PJ_TYPE_PROJECTED_CRS )
+        {
+            auto ctxt = d->getPROJContext();
+            auto cs = proj_crs_get_coordinate_system(ctxt, d->m_pj_crs);
+            if( cs )
+            {
+                const int axisCount = proj_cs_get_axis_count(ctxt, cs);
+                proj_destroy(cs);
+                if( axisCount == 3 )
+                {
+                    // This might come from a COMPD_CS with a VERT_DATUM type = 2002
+                    // in which case, using the WKT1 representation will enable
+                    // us to recover the EPSG code.
+                    pszTargetKey = pszInputTargetKey;
+                }
+            }
+        }
         d->undoDemoteFromBoundCRS();
-        return ret;
+        if( ret != nullptr || pszTargetKey == nullptr )
+        {
+            return ret;
+        }
     }
 
 /* -------------------------------------------------------------------- */
@@ -7738,6 +7759,7 @@ OGRSpatialReference::GetAuthorityName( const char *pszTargetKey ) const
 
 {
     d->refreshProjObj();
+    const char* pszInputTargetKey = pszTargetKey;
     pszTargetKey = d->nullifyTargetKeyIfPossible(pszTargetKey);
     if( pszTargetKey == nullptr )
     {
@@ -7747,8 +7769,28 @@ OGRSpatialReference::GetAuthorityName( const char *pszTargetKey ) const
         }
         d->demoteFromBoundCRS();
         auto ret = proj_get_id_auth_name(d->m_pj_crs, 0);
+        if( ret == nullptr && d->m_pjType == PJ_TYPE_PROJECTED_CRS )
+        {
+            auto ctxt = d->getPROJContext();
+            auto cs = proj_crs_get_coordinate_system(ctxt, d->m_pj_crs);
+            if( cs )
+            {
+                const int axisCount = proj_cs_get_axis_count(ctxt, cs);
+                proj_destroy(cs);
+                if( axisCount == 3 )
+                {
+                    // This might come from a COMPD_CS with a VERT_DATUM type = 2002
+                    // in which case, using the WKT1 representation will enable
+                    // us to recover the EPSG code.
+                    pszTargetKey = pszInputTargetKey;
+                }
+            }
+        }
         d->undoDemoteFromBoundCRS();
-        return ret;
+        if( ret != nullptr || pszTargetKey == nullptr )
+        {
+            return ret;
+        }
     }
 
 /* -------------------------------------------------------------------- */
@@ -8846,28 +8888,14 @@ OGRSpatialReferenceH OSRConvertToOtherProjection(
 
 /**
  * \brief Try to identify a match between the passed SRS and a related SRS
- * in a catalog (currently EPSG only)
+ * in a catalog.
  *
  * Matching may be partial, or may fail.
  * Returned entries will be sorted by decreasing match confidence (first
  * entry has the highest match confidence).
  *
- * The exact way matching is done may change in future versions.
- *
- * The current algorithm is:
- * - try first AutoIdentifyEPSG(). If it succeeds, return the corresponding SRS
- * - otherwise iterate over all SRS from the EPSG catalog (as found in GDAL
- *   pcs.csv and gcs.csv files+esri_extra.wkt), and find those that match the
- *   input SRS using the IsSame() function (ignoring TOWGS84 clauses)
- * - if there is a single match using IsSame() or one of the matches has the
- *   same SRS name, return it with 100% confidence
- * - if a SRS has the same SRS name, but does not pass the IsSame() criteria,
- *   return it with 50% confidence.
- * - otherwise return all candidate SRS that pass the IsSame() criteria with a
- *   90% confidence.
- *
- * A pre-built SRS cache in ~/.gdal/X.Y/srs_cache will be used if existing,
- * otherwise it will be built at the first run of this function.
+ * The exact way matching is done may change in future versions. Starting with
+ * GDAL 3.0, it relies on PROJ' proj_identify() function.
  *
  * This function is the same as OGRSpatialReference::FindMatches().
  *
@@ -9467,7 +9495,7 @@ int OSRGetAxesCount( OGRSpatialReferenceH hSRS )
  * This method is equivalent to the C function OSRGetAxis().
  *
  * @param pszTargetKey the coordinate system part to query ("PROJCS" or "GEOGCS").
- * @param iAxis the axis to query (0 for first, 1 for second).
+ * @param iAxis the axis to query (0 for first, 1 for second, 2 for third).
  * @param peOrientation location into which to place the fetch orientation, may be NULL.
  *
  * @return the name of the axis or NULL on failure.
@@ -10340,28 +10368,14 @@ OGRErr OSRMorphFromESRI( OGRSpatialReferenceH hSRS )
 
 /**
  * \brief Try to identify a match between the passed SRS and a related SRS
- * in a catalog (currently EPSG only)
+ * in a catalog.
  *
  * Matching may be partial, or may fail.
  * Returned entries will be sorted by decreasing match confidence (first
  * entry has the highest match confidence).
  *
- * The exact way matching is done may change in future versions.
- * 
- *  The current algorithm is:
- * - try first AutoIdentifyEPSG(). If it succeeds, return the corresponding SRS
- * - otherwise iterate over all SRS from the EPSG catalog (as found in GDAL
- *   pcs.csv and gcs.csv files+esri_extra.wkt), and find those that match the
- *   input SRS using the IsSame() function (ignoring TOWGS84 clauses)
- * - if there is a single match using IsSame() or one of the matches has the
- *   same SRS name, return it with 100% confidence
- * - if a SRS has the same SRS name, but does not pass the IsSame() criteria,
- *   return it with 50% confidence.
- * - otherwise return all candidate SRS that pass the IsSame() criteria with a
- *   90% confidence.
- * 
- * A pre-built SRS cache in ~/.gdal/X.Y/srs_cache will be used if existing,
- * otherwise it will be built at the first run of this function.
+ * The exact way matching is done may change in future versions. Starting with
+ * GDAL 3.0, it relies on PROJ' proj_identify() function.
  *
  * This method is the same as OSRFindMatches().
  *

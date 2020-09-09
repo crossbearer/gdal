@@ -30,7 +30,6 @@
 import copy
 import os
 import sys
-import array
 import shutil
 import struct
 from osgeo import gdal
@@ -237,7 +236,7 @@ def test_tiff_write_6():
                                   gdal.GDT_Byte, options)
 
     # make a 32x32 byte buffer
-    buf = array.array('B', list(range(32))).tostring() * 32
+    buf = b''.join(struct.pack('B', v) for v in range(32)) * 32
 
     ds.WriteRaster(0, 0, 32, 32, buf, buf_type=gdal.GDT_Byte)
     ds.FlushCache()
@@ -264,7 +263,7 @@ def test_tiff_write_7():
                                   gdal.GDT_Byte, options)
 
     # make a 32x32 byte buffer
-    buf = array.array('B', list(range(32))).tostring() * 32
+    buf = b''.join(struct.pack('B', v) for v in range(32)) * 32
 
     ds.WriteRaster(0, 0, 32, 32, buf, buf_type=gdal.GDT_Byte)
     ds.FlushCache()
@@ -289,7 +288,7 @@ def test_tiff_write_8():
                                   gdal.GDT_Byte, options)
 
     # make a 32x32 byte buffer
-    buf = array.array('B', list(range(32))).tostring() * 32
+    buf = b''.join(struct.pack('B', v) for v in range(32)) * 32
 
     ds.WriteRaster(0, 0, 32, 32, buf, buf_type=gdal.GDT_Byte)
     ds.FlushCache()
@@ -1081,8 +1080,7 @@ def test_tiff_write_30():
     ds = None
 
     fileobj = open('tmp/bigtiff.tif', mode='rb')
-    binvalues = array.array('b')
-    binvalues.fromfile(fileobj, 4)
+    binvalues = struct.unpack('B' * 4, fileobj.read(4))
     fileobj.close()
 
     gdaltest.tiff_drv.Delete('tmp/bigtiff.tif')
@@ -1106,8 +1104,7 @@ def test_tiff_write_31():
     ds = None
 
     fileobj = open('tmp/bigtiff.tif', mode='rb')
-    binvalues = array.array('b')
-    binvalues.fromfile(fileobj, 4)
+    binvalues = struct.unpack('B' * 4, fileobj.read(4))
     fileobj.close()
 
     gdaltest.tiff_drv.Delete('tmp/bigtiff.tif')
@@ -1948,8 +1945,7 @@ def test_tiff_write_61():
     ds = None
 
     fileobj = open('tmp/bigtiff.tif', mode='rb')
-    binvalues = array.array('b')
-    binvalues.fromfile(fileobj, 4)
+    binvalues = struct.unpack('B' * 4, fileobj.read(4))
     fileobj.close()
 
     gdaltest.tiff_drv.Delete('tmp/bigtiff.tif')
@@ -1973,8 +1969,7 @@ def test_tiff_write_62():
     ds = None
 
     fileobj = open('tmp/bigtiff.tif', mode='rb')
-    binvalues = array.array('b')
-    binvalues.fromfile(fileobj, 4)
+    binvalues = struct.unpack('B' * 4, fileobj.read(4))
     fileobj.close()
 
     gdaltest.tiff_drv.Delete('tmp/bigtiff.tif')
@@ -2227,12 +2222,8 @@ def test_tiff_write_72():
         src_ds = None
 
         fileobj = open('tmp/tiff_write_72.tif', mode='rb')
-        binvalues = array.array('b')
         fileobj.seek(4)
-        try:
-            binvalues.fromfile(fileobj, 4)
-        except:
-            binvalues.fromfile(fileobj, 4)
+        binvalues = struct.unpack('B' * 4, fileobj.read(4))
         fileobj.close()
 
         # Directory should be at offset 8 of the file
@@ -2260,12 +2251,8 @@ def test_tiff_write_73():
     out_ds = None
 
     fileobj = open('tmp/tiff_write_73.tif', mode='rb')
-    binvalues = array.array('b')
     fileobj.seek(4)
-    try:
-        binvalues.fromfile(fileobj, 4)
-    except:
-        binvalues.fromfile(fileobj, 4)
+    binvalues = struct.unpack('B' * 4, fileobj.read(4))
     fileobj.close()
 
     # Directory should be at offset 8 of the file
@@ -2277,12 +2264,8 @@ def test_tiff_write_73():
     out_ds = None
 
     fileobj = open('tmp/tiff_write_73.tif', mode='rb')
-    binvalues = array.array('b')
     fileobj.seek(4)
-    try:
-        binvalues.fromfile(fileobj, 4)
-    except:
-        binvalues.fromfile(fileobj, 4)
+    binvalues = struct.unpack('B' * 4, fileobj.read(4))
     fileobj.close()
 
     # Directory should be at offset 8 of the file
@@ -3586,6 +3569,40 @@ def test_tiff_write_98():
     gdaltest.tiff_drv.Delete('tmp/test_98.tif')
 
 ###############################################################################
+# Create a rotated geotiff file (uses a geomatrix) with - PixelIsPoint
+
+
+def test_tiff_write_tiepoints_pixelispoint():
+
+    tmpfilename = '/vsimem/test_tiff_write_tiepoints_pixelispoint.tif'
+
+    gdal.Translate(tmpfilename, 'data/byte_gcp_pixelispoint.tif')
+    ds = gdal.Open(tmpfilename)
+    assert ds.GetMetadataItem('AREA_OR_POINT') == 'Point'
+    assert ds.GetGCPCount() == 4
+    gcp = ds.GetGCPs()[0]
+    assert (gcp.GCPPixel == pytest.approx(0.5, abs=1e-5) and \
+       gcp.GCPLine == pytest.approx(0.5, abs=1e-5) and \
+       gcp.GCPX == pytest.approx(-180, abs=1e-5) and \
+       gcp.GCPY == pytest.approx(90, abs=1e-5) and \
+       gcp.GCPZ == pytest.approx(0, abs=1e-5))
+
+
+    with gdaltest.config_option('GTIFF_POINT_GEO_IGNORE', 'YES'):
+        gdal.Translate(tmpfilename, 'data/byte_gcp_pixelispoint.tif')
+        ds = gdal.Open(tmpfilename)
+        assert ds.GetMetadataItem('AREA_OR_POINT') == 'Point'
+        assert ds.GetGCPCount() == 4
+        gcp = ds.GetGCPs()[0]
+        assert (gcp.GCPPixel == pytest.approx(0, abs=1e-5) and \
+        gcp.GCPLine == pytest.approx(0, abs=1e-5) and \
+        gcp.GCPX == pytest.approx(-180, abs=1e-5) and \
+        gcp.GCPY == pytest.approx(90, abs=1e-5) and \
+        gcp.GCPZ == pytest.approx(0, abs=1e-5))
+
+    gdal.Unlink(tmpfilename)
+
+###############################################################################
 # Create copy into a RGB JPEG-IN-TIFF (#3887)
 
 
@@ -3647,9 +3664,7 @@ def test_tiff_write_101():
         f.close()
     else:
         import random
-        rand_array = array.array('B')
-        for _ in range(10 * 1024 * 1024):
-            rand_array.append(random.randint(0, 255))
+        rand_array = b''.join(struct.pack('B', random.randint(0, 255)) for _ in range(10 * 1024 * 1024))
 
     f = open('tmp/tiff_write_101.bin', 'wb')
     f.write(rand_array)

@@ -899,18 +899,22 @@ GDALDataset *VRTDataset::Open( GDALOpenInfo * poOpenInfo )
 /* -------------------------------------------------------------------- */
 /*      Initialize info for later overview discovery.                   */
 /* -------------------------------------------------------------------- */
-    if( fp != nullptr && poDS != nullptr )
-    {
-        poDS->oOvManager.Initialize( poDS, poOpenInfo->pszFilename );
-        if( poOpenInfo->AreSiblingFilesLoaded() )
-            poDS->oOvManager.TransferSiblingFiles(
-                poOpenInfo->StealSiblingFiles() );
-    }
 
-    if( poDS && poDS->eAccess == GA_Update &&
-        poDS->m_poRootGroup && !STARTS_WITH_CI(poOpenInfo->pszFilename, "<VRT") )
+    if( poDS != nullptr )
     {
-        poDS->m_poRootGroup->SetFilename(poOpenInfo->pszFilename);
+        if( fp != nullptr )
+        {
+            poDS->oOvManager.Initialize( poDS, poOpenInfo->pszFilename );
+            if( poOpenInfo->AreSiblingFilesLoaded() )
+                poDS->oOvManager.TransferSiblingFiles(
+                    poOpenInfo->StealSiblingFiles() );
+        }
+
+        if (poDS->eAccess == GA_Update &&
+            poDS->m_poRootGroup && !STARTS_WITH_CI(poOpenInfo->pszFilename, "<VRT") )
+        {
+            poDS->m_poRootGroup->SetFilename(poOpenInfo->pszFilename);
+        }
     }
 
     return poDS;
@@ -1771,6 +1775,18 @@ CPLErr VRTDataset::IRasterIO( GDALRWFlag eRWFlag,
                               GSpacing nBandSpace,
                               GDALRasterIOExtraArg* psExtraArg )
 {
+    // It may be valid to recurse one when dealing with a subsampled request
+    if( m_nRecursionCounter > 1 )
+    {
+        CPLError(
+            CE_Failure, CPLE_AppDefined,
+            "VRTDataset::IRasterIO() called recursively on the "
+            "same dataset. It looks like the VRT is referencing itself." );
+        return CE_Failure;
+    }
+
+    m_nRecursionCounter ++;
+
     bool bLocalCompatibleForDatasetIO = CPL_TO_BOOL(CheckCompatibleForDatasetIO());
     if( bLocalCompatibleForDatasetIO && eRWFlag == GF_Read &&
         (nBufXSize < nXSize || nBufYSize < nYSize) )
@@ -1786,7 +1802,10 @@ CPLErr VRTDataset::IRasterIO( GDALRWFlag eRWFlag,
                                                  psExtraArg,
                                                  &bTried );
         if( bTried )
+        {
+            m_nRecursionCounter --;
             return eErr;
+        }
 
         for(int iBand = 0; iBand < nBands; iBand++)
         {
@@ -1904,15 +1923,18 @@ CPLErr VRTDataset::IRasterIO( GDALRWFlag eRWFlag,
         psExtraArg->pfnProgress = pfnProgressGlobal;
         psExtraArg->pProgressData = pProgressDataGlobal;
 
+        m_nRecursionCounter --;
         return eErr;
     }
 
-    return GDALDataset::IRasterIO( eRWFlag, nXOff, nYOff, nXSize, nYSize,
+    CPLErr eErr = GDALDataset::IRasterIO( eRWFlag, nXOff, nYOff, nXSize, nYSize,
                                    pData, nBufXSize, nBufYSize,
                                    eBufType,
                                    nBandCount, panBandMap,
                                    nPixelSpace, nLineSpace, nBandSpace,
                                    psExtraArg );
+    m_nRecursionCounter --;
+    return eErr;
 }
 
 /************************************************************************/
@@ -1947,6 +1969,51 @@ void VRTDataset::UnsetPreservedRelativeFilenames()
 /*                        BuildVirtualOverviews()                       */
 /************************************************************************/
 
+static bool CheckBandForOverview(GDALRasterBand* poBand,
+                                 GDALRasterBand*& poFirstBand,
+                                 int& nOverviews,
+                                 std::vector<GDALDataset*>& apoOverviewsBak)
+{
+    if( !cpl::down_cast<VRTRasterBand *>(poBand)->IsSourcedRasterBand())
+        return false;
+
+    VRTSourcedRasterBand* poVRTBand
+        = cpl::down_cast<VRTSourcedRasterBand *>(poBand);
+    if( poVRTBand->nSources != 1 )
+        return false;
+    if( !poVRTBand->papoSources[0]->IsSimpleSource() )
+        return false;
+
+    VRTSimpleSource* poSource
+        = cpl::down_cast<VRTSimpleSource *>( poVRTBand->papoSources[0] );
+    if( !EQUAL(poSource->GetType(), "SimpleSource") &&
+        !EQUAL(poSource->GetType(), "ComplexSource") )
+        return false;
+    GDALRasterBand* poSrcBand =
+        poBand->GetBand() == 0 ? poSource->GetMaskBandMainBand() : poSource->GetBand();
+    if( poSrcBand == nullptr )
+        return false;
+
+    // To prevent recursion
+    apoOverviewsBak.push_back(nullptr);
+    const int nOvrCount = poSrcBand->GetOverviewCount();
+    apoOverviewsBak.resize(0);
+
+    if( nOvrCount == 0 )
+        return false;
+    if( poFirstBand == nullptr )
+    {
+        if( poSrcBand->GetXSize() == 0 || poSrcBand->GetYSize() == 0 )
+            return false;
+        poFirstBand = poSrcBand;
+        nOverviews = nOvrCount;
+    }
+    else if( nOvrCount < nOverviews )
+        nOverviews = nOvrCount;
+    return true;
+}
+
+
 void VRTDataset::BuildVirtualOverviews()
 {
     // Currently we expose virtual overviews only if the dataset is made of
@@ -1958,58 +2025,22 @@ void VRTDataset::BuildVirtualOverviews()
     int nOverviews = 0;
     GDALRasterBand* poFirstBand = nullptr;
 
-    const auto CheckBandForOverview =
-        [&nOverviews, &poFirstBand, this](GDALRasterBand* poBand)
-    {
-        if( !cpl::down_cast<VRTRasterBand *>(poBand)->IsSourcedRasterBand())
-            return false;
-
-        VRTSourcedRasterBand* poVRTBand
-            = cpl::down_cast<VRTSourcedRasterBand *>(poBand);
-        if( poVRTBand->nSources != 1 )
-            return false;
-        if( !poVRTBand->papoSources[0]->IsSimpleSource() )
-            return false;
-
-        VRTSimpleSource* poSource
-            = cpl::down_cast<VRTSimpleSource *>( poVRTBand->papoSources[0] );
-        if( !EQUAL(poSource->GetType(), "SimpleSource") &&
-            !EQUAL(poSource->GetType(), "ComplexSource") )
-            return false;
-        GDALRasterBand* poSrcBand =
-            poBand->GetBand() == 0 ? poSource->GetMaskBandMainBand() : poSource->GetBand();
-        if( poSrcBand == nullptr )
-            return false;
-
-        // To prevent recursion
-        m_apoOverviewsBak.push_back(nullptr);
-        const int nOvrCount = poSrcBand->GetOverviewCount();
-        m_apoOverviewsBak.resize(0);
-
-        if( nOvrCount == 0 )
-            return false;
-        if( poFirstBand == nullptr )
-        {
-            if( poSrcBand->GetXSize() == 0 || poSrcBand->GetYSize() == 0 )
-                return false;
-            poFirstBand = poSrcBand;
-            nOverviews = nOvrCount;
-        }
-        else if( nOvrCount < nOverviews )
-            nOverviews = nOvrCount;
-        return true;
-    };
-
     for( int iBand = 0; iBand < nBands; iBand++ )
     {
-        if( !CheckBandForOverview(papoBands[iBand]) )
+        if( !CheckBandForOverview(papoBands[iBand], poFirstBand, nOverviews, m_apoOverviewsBak) )
             return;
     }
 
     if( m_poMaskBand )
     {
-        if( !CheckBandForOverview(m_poMaskBand) )
+        if( !CheckBandForOverview(m_poMaskBand, poFirstBand, nOverviews, m_apoOverviewsBak) )
             return;
+    }
+    if( poFirstBand == nullptr )
+    {
+        // to make cppcheck happy
+        CPLAssert(false);
+        return;
     }
 
     for( int j = 0; j < nOverviews; j++)

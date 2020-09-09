@@ -77,12 +77,8 @@ General creation options
    multi-threaded compression by specifying the number of worker
    threads. Default is compression in the main thread. This also determines
    the number of threads used when reprojection is done with the TILING_SCHEME
-   or TARGET_SRS creation options.
-
-   .. note::
-
-        Overview generation by itself, which can take most of the
-        total processing time, is not multithreaded currently.
+   or TARGET_SRS creation options. (Overview generation is also multithreaded since
+   GDAL 3.2)
 
 -  **PREDICTOR=[YES/NO/STANDARD/FLOATING_POINT]**: Set the predictor for LZW,
    DEFLATE and ZSTD compression. The default is NO. If YES is specified, then
@@ -126,6 +122,18 @@ General creation options
    For paletted images,
    NEAREST is used by default, otherwise it is CUBIC.
 
+-  **OVERVIEW_RESAMPLING=[NEAREST/AVERAGE/BILINEAR/CUBIC/CUBICSPLINE/LANCZOS]**:
+   (since GDAL 3.2)
+   Resampling method used for overview generation.
+   For paletted images, NEAREST is used by default, otherwise it is CUBIC.
+   This overrides, for overview generation, the value of ``RESAMPLING`` if it specified.
+
+-  **WARP_RESAMPLING=[NEAREST/AVERAGE/BILINEAR/CUBIC/CUBICSPLINE/LANCZOS]**:
+   (since GDAL 3.2)
+   Resampling method used for reprojection.
+   For paletted images, NEAREST is used by default, otherwise it is CUBIC.
+   This overrides, for reprojection, the value of ``RESAMPLING`` if it specified.
+
 - **OVERVIEWS=[AUTO/IGNORE_EXISTING/FORCE_USE_EXISTING/NONE]**: Describe the behavior
   regarding overview generation and use of source overviews.
   
@@ -162,6 +170,18 @@ General creation options
 
   .. note:: Write support for GeoTIFF 1.1 requires libgeotiff 1.6.0 or later.
 
+- **SPARSE_OK=TRUE/FALSE** ((GDAL >= 3.2): Should empty blocks be
+   omitted on disk? When this option is set, any attempt of writing a
+   block whose all pixels are 0 or the nodata value will cause it not to
+   be written at all (unless there is a corresponding block already
+   allocated in the file). Sparse files have 0 tile/strip offsets for
+   blocks never written and save space; however, most non-GDAL packages
+   cannot read such files.
+   On the reading side, the presence of a omitted tile after a non-empty one
+   may cause optimized readers to have to issue an extra GET request to the
+   TileByteCounts array.
+   The default is FALSE.
+
 Reprojection related creation options
 *************************************
 
@@ -173,7 +193,7 @@ Reprojection related creation options
   256 pixels) will be used, unless the user has specified a value with the
   BLOCKSIZE creation option, in which case the user specified one will be taken
   into account (that is if setting a higher value than 256, the original
-  tiling scheme is modified to take into account the size of the HiDiPi tiles).
+  tiling scheme is modified to take into account the size of the HiDPi tiles).
   In non-CUSTOM mode, TARGET_SRS, RES and EXTENT options are ignored.
   Starting with GDAL 3.2, the value of TILING_SCHEME can also be the filename
   of a JSON file according to the `OGC Two Dimensional Tile Matrix Set standard`_,
@@ -181,6 +201,14 @@ Reprojection related creation options
   (e.g. ``FOO`` for a file named ``tms_FOO.json``) or the inline JSON definition.
 
 .. _`OGC Two Dimensional Tile Matrix Set standard`: http://docs.opengeospatial.org/is/17-083r2/17-083r2.html
+
+- **ZOOM_LEVEL_STRATEGY**\ =AUTO/LOWER/UPPER. (GDAL >= 3.2) Strategy to determine
+  zoom level. Only used for TILING_SCHEME different from CUSTOM.
+  LOWER will select the zoom level immediately below the
+  theoretical computed non-integral zoom level, leading to subsampling.
+  On the contrary, UPPER will select the immediately above zoom level,
+  leading to oversampling. Defaults to AUTO which selects the closest
+  zoom level.
 
 - **TARGET_SRS=string**: to force reprojection of the input dataset to another
   SRS. The string can be a WKT string, a EPSG:XXXX code or a PROJ string.
@@ -304,17 +332,23 @@ line).
   warning on writing, and when reopening such file, so that users know they have 
   *broken* their COG file
 
-- ``MASK_INTERLEAVED_WITH_IMAGERY=YES``: indicates that mask data immediately 
-  follows imagery data. So when reading data at offset=TileOffset[i] - 4 and 
+- ``MASK_INTERLEAVED_WITH_IMAGERY=YES``: indicates that mask data immediately
+  follows imagery data. So when reading data at offset=TileOffset[i] - 4 and
   size=TileOffset[i+1]-TileOffset[i]+4, you'll get a buffer with:
 
    * leader with imagery tile size (4 bytes)
-   * imagery data (starting at TileOffset[i] and of size TileByteCount[i])
+   * imagery data (starting at TileOffsets[i] and of size TileByteCounts[i])
    * trailer of imagery (4 bytes)
    * leader with mask tilesize (4 bytes)
-   * mask data (starting at mask.TileOffset[i] and of size 
-     mask.TileByteCount[i], but none of them actually need to be read)
+   * mask data (starting at mask.TileOffsets[i] and of size
+     mask.TileByteCounts[i], but none of them actually need to be read)
    * trailer of mask data (4 bytes)
+
+.. note::
+
+    The content of the header ghost area can be retrieved by getting the
+    ``GDAL_STRUCTURAL_METADATA`` metadata item of the ``TIFF`` metadata domain
+    on the datasett object (with GetMetadataItem())
 
 .. _cog.tile_data_leader_trailer:
 
@@ -344,7 +378,7 @@ of the last 4 bytes of the payload of the tile data. The size of this trailer is
 readers to be able to check if TIFF writers, not aware of those optimizations,
 have modified the  TIFF file in a way that breaks the optimizations. If an optimized reader 
 detects an inconsistency, it can then fallbacks to the regular/slower method of using 
-TileOffset[i] + TileByteCount[i].
+TileOffsets[i] + TileByteCounts[i].
 
 Examples
 --------

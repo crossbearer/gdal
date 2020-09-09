@@ -34,6 +34,7 @@ from gdrivers.netcdf import netcdf_setup  # noqa
 netcdf_setup; # to please pyflakes
 
 import gdaltest
+import os
 import pytest
 import struct
 import sys
@@ -220,7 +221,7 @@ def test_netcdf_multidim_var_alldatatypes(netcdf_setup):  # noqa
         if dt == gdal.GDT_UInt16:
             assert struct.unpack('H' * len(val), var.Read()) == val
         if dt == gdal.GDT_Int16:
-            assert struct.unpack('h' * len(val), var.Read()) == val
+            assert struct.unpack('h' * len(val), var.Read()) == val, var_name
         if dt == gdal.GDT_UInt32:
             assert struct.unpack('I' * len(val), var.Read()) == val
         if dt == gdal.GDT_Int32:
@@ -237,6 +238,24 @@ def test_netcdf_multidim_var_alldatatypes(netcdf_setup):  # noqa
             assert struct.unpack('f' * len(val), var.Read()) == val
         if dt == gdal.GDT_CFloat64:
             assert struct.unpack('d' * len(val), var.Read()) == val
+
+    # Read byte_var (where nc native type != gdal data type) to other data types
+    var = rg.OpenMDArray('byte_var')
+    assert struct.unpack('B' * 2, var.Read(buffer_datatype = gdal.ExtendedDataType.Create(gdal.GDT_Byte))) == (0, 0)
+    assert struct.unpack('i' * 2, var.Read(buffer_datatype = gdal.ExtendedDataType.Create(gdal.GDT_Int32))) == (-128, -127)
+
+    # Read int_var to other data types
+    var = rg.OpenMDArray('int_var')
+    assert struct.unpack('h' * 2, var.Read(buffer_datatype = gdal.ExtendedDataType.Create(gdal.GDT_Int16))) == (-32768, -32768)
+    assert struct.unpack('f' * 2, var.Read(buffer_datatype = gdal.ExtendedDataType.Create(gdal.GDT_Float32))) == (-2147483648.0, -2147483648.0)
+    assert struct.unpack('d' * 2, var.Read(buffer_datatype = gdal.ExtendedDataType.Create(gdal.GDT_Float64))) == (-2147483648.0, -2147483647.0)
+
+    # Read int64_var (where nc native type != gdal data type) to other data types
+    var = rg.OpenMDArray('int64_var')
+    assert struct.unpack('h' * 2, var.Read(buffer_datatype = gdal.ExtendedDataType.Create(gdal.GDT_Int16))) == (-32768, -32768)
+    assert struct.unpack('f' * 2, var.Read(buffer_datatype = gdal.ExtendedDataType.Create(gdal.GDT_Float32))) == (-9.223372036854776e+18, -9.223372036854776e+18)
+    assert struct.unpack('d' * 2, var.Read(buffer_datatype = gdal.ExtendedDataType.Create(gdal.GDT_Float64))) == (-9.223372036854776e+18, -9.223372036854776e+18)
+
 
     var = rg.OpenMDArray('custom_type_2_elts_var')
     dt = var.GetDataType()
@@ -380,6 +399,16 @@ def test_netcdf_multidim_read_array(netcdf_setup):  # noqa
 
     data = var.Read(array_start_idx = [1, 1, 1], count = [3, 2, 2], buffer_datatype = gdal.ExtendedDataType.Create(gdal.GDT_UInt16))
     assert struct.unpack('H' * (len(data) // 2), data) == got_data_ref
+
+    # Test reading from slice (most optimized path)
+    data = var.Read(array_start_idx = [3, 0, 0], count = [1, 2, 3])
+    data_from_slice = var[3].Read(count = [2, 3])
+    assert data_from_slice == data
+
+    # Test reading from slice (slower path)
+    data = var.Read(array_start_idx = [3, 0, 0], count = [1, 2, 3], array_step = [1, 2, 1])
+    data_from_slice = var[3].Read(count = [2, 3], array_step = [2, 1])
+    assert data_from_slice == data
 
     # 4D
     var = rg.OpenMDArray('ubyte_t2_z2_y2_x2_var')
@@ -742,7 +771,8 @@ def test_netcdf_multidim_create_nc4(netcdf_setup):  # noqa
 
         var = rg.CreateMDArray('my_var_x', [dim_x],
                                gdal.ExtendedDataType.Create(gdal.GDT_Float64),
-                               ['BLOCKSIZE=1', 'COMPRESS=DEFLATE', 'ZLEVEL=6'])
+                               ['BLOCKSIZE=1', 'COMPRESS=DEFLATE', 'ZLEVEL=6',
+                                'CHECKSUM=YES'])
         assert var.Write(struct.pack('f' * 2, 1.25, 2.25),
                 buffer_datatype = gdal.ExtendedDataType.Create(gdal.GDT_Float32)) == gdal.CE_None
         assert struct.unpack('d' * 2, var.Read()) == (1.25, 2.25)
@@ -750,6 +780,14 @@ def test_netcdf_multidim_create_nc4(netcdf_setup):  # noqa
         assert var
         assert var.GetBlockSize() == [1]
         assert var.GetStructuralInfo() == { 'COMPRESS': 'DEFLATE' }
+
+        # Try with random filter id. Just to test that FILTER is taken
+        # into account
+        with gdaltest.error_handler():
+            var = rg.CreateMDArray('my_var_x', [dim_x],
+                                gdal.ExtendedDataType.Create(gdal.GDT_Float64),
+                                ['FILTER=123456789,2'])
+        assert var is None
 
         var = rg.OpenMDArray('my_var_x')
         assert var
@@ -1264,3 +1302,123 @@ def test_netcdf_multidim_getmdarraynames_options(netcdf_setup):  # noqa
     rg = ds.GetRootGroup()
     assert 'mygridmapping' not in rg.GetMDArrayNames()
     assert 'mygridmapping' in rg.GetMDArrayNames(['SHOW_ZERO_DIM=YES'])
+
+
+def test_netcdf_multidim_indexing_var_through_coordinates(netcdf_setup):  # noqa
+
+    tmpfilename = 'tmp/test_netcdf_multidim_indexing_var_through_coordinates.nc'
+    drv = gdal.GetDriverByName('netCDF')
+
+    def create():
+        ds = drv.CreateMultiDimensional(tmpfilename)
+        rg = ds.GetRootGroup()
+        dim1 = rg.CreateDimension('dim1', None, None, 1)
+        dim2 = rg.CreateDimension('dim2', None, None, 2)
+        var = rg.CreateMDArray('var', [dim1, dim2],  gdal.ExtendedDataType.Create(gdal.GDT_Float64))
+        att = var.CreateAttribute('coordinates', [], gdal.ExtendedDataType.CreateString())
+        assert att
+        assert att.Write('dim1_var dim2_var') == gdal.CE_None
+        rg.CreateMDArray('dim1_var', [dim1],  gdal.ExtendedDataType.Create(gdal.GDT_Float64))
+        rg.CreateMDArray('dim2_var', [dim2],  gdal.ExtendedDataType.Create(gdal.GDT_Float64))
+
+    def check():
+        ds = gdal.OpenEx(tmpfilename, gdal.OF_MULTIDIM_RASTER)
+        rg = ds.GetRootGroup()
+        dims = rg.GetDimensions()
+        dim1 = [x for x in dims if x.GetName() == 'dim1'][0]
+        assert dim1.GetIndexingVariable().GetName() == 'dim1_var'
+        dim2 = [x for x in dims if x.GetName() == 'dim2'][0]
+        assert dim2.GetIndexingVariable().GetName() == 'dim2_var'
+
+    create()
+    check()
+    gdal.Unlink(tmpfilename)
+
+
+def test_netcdf_multidim_stats(netcdf_setup):  # noqa
+
+    tmpfilename = 'tmp/test_netcdf_multidim_stats.nc'
+    drv = gdal.GetDriverByName('netCDF')
+
+    def create():
+        ds = drv.CreateMultiDimensional(tmpfilename)
+        rg = ds.GetRootGroup()
+        dim0 = rg.CreateDimension("dim0", "unspecified type", "unspecified direction", 2)
+        dim1 = rg.CreateDimension("dim1", "unspecified type", "unspecified direction", 3)
+        float64dt = gdal.ExtendedDataType.Create(gdal.GDT_Float64)
+        ar = rg.CreateMDArray("myarray", [dim0, dim1], float64dt)
+        ar.SetNoDataValueDouble(6)
+        data = struct.pack('d' * 6, 1, 2, 3, 4, 5, 6)
+        ar.Write(data)
+
+    def compute_stats():
+        ds = gdal.OpenEx(tmpfilename, gdal.OF_MULTIDIM_RASTER)
+        rg = ds.GetRootGroup()
+        ar = rg.OpenMDArray('myarray')
+
+        stats = ar.GetStatistics(ds, False, force=False)
+        assert stats is None
+
+        stats = ar.GetStatistics(ds, False, force=True)
+        assert stats is not None
+        assert stats.min == 1.0
+        assert stats.max == 5.0
+        assert stats.mean == 3.0
+        assert stats.std_dev == pytest.approx(1.4142135623730951)
+        assert stats.valid_count == 5
+
+        view = ar.GetView("[0,0]")
+        stats = view.GetStatistics(ds, False, force=False)
+        assert stats is None
+
+        stats = view.GetStatistics(ds, False, force=True)
+        assert stats is not None
+        assert stats.min == 1.0
+        assert stats.max == 1.0
+
+    # Check that we can read stats from the .aux.xml
+    def reopen():
+        assert os.path.exists(tmpfilename + '.aux.xml')
+
+        ds = gdal.OpenEx(tmpfilename, gdal.OF_MULTIDIM_RASTER)
+        rg = ds.GetRootGroup()
+        ar = rg.OpenMDArray('myarray')
+
+        stats = ar.GetStatistics(ds, False, force=False)
+        assert stats is not None
+        assert stats.min == 1.0
+        assert stats.max == 5.0
+        assert stats.mean == 3.0
+        assert stats.std_dev == pytest.approx(1.4142135623730951)
+        assert stats.valid_count == 5
+
+        view = ar.GetView("[0,0]")
+        stats = view.GetStatistics(ds, False, force=False)
+        assert stats is not None
+        assert stats.min == 1.0
+        assert stats.max == 1.0
+
+    def clear_stats():
+        assert os.path.exists(tmpfilename + '.aux.xml')
+
+        ds = gdal.OpenEx(tmpfilename, gdal.OF_MULTIDIM_RASTER)
+        ds.ClearStatistics()
+        rg = ds.GetRootGroup()
+        ar = rg.OpenMDArray('myarray')
+        stats = ar.GetStatistics(ds, False, force=False)
+        assert stats is None
+        ds = None
+
+        ds = gdal.OpenEx(tmpfilename, gdal.OF_MULTIDIM_RASTER)
+        rg = ds.GetRootGroup()
+        ar = rg.OpenMDArray('myarray')
+        stats = ar.GetStatistics(ds, False, force=False)
+        assert stats is None
+
+    try:
+        create()
+        compute_stats()
+        reopen()
+        clear_stats()
+    finally:
+        drv.Delete(tmpfilename)

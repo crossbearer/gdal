@@ -291,6 +291,11 @@ inline OGRLayer::FeatureIterator begin(OGRLayer* poLayer) { return poLayer->begi
  */
 inline OGRLayer::FeatureIterator end(OGRLayer* poLayer) { return poLayer->end(); }
 
+/** Unique pointer type for OGRLayer.
+ * @since GDAL 3.2
+ */
+using OGRLayerUniquePtr = std::unique_ptr<OGRLayer>;
+
 /************************************************************************/
 /*                     OGRGetNextFeatureThroughRaw                      */
 /************************************************************************/
@@ -565,6 +570,7 @@ void CPL_DLL RegisterOGRGMLAS();
 void CPL_DLL RegisterOGRMVT();
 void CPL_DLL RegisterOGRNGW();
 void CPL_DLL RegisterOGRMapML();
+void CPL_DLL RegisterOGRLVBAG();
 // @endcond
 
 CPL_C_END

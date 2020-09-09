@@ -1164,7 +1164,7 @@ class netCDFLayer final: public OGRLayer
 
         int             GetCDFID() const { return m_nLayerCDFId; }
         void            SetCDFID(int nId) { m_nLayerCDFId = nId; }
-        void            SetSGeometryRepresentation(std::shared_ptr<nccfdriver::SGeometry_Reader> sg) { m_simpleGeometryReader = sg; }
+        void            SetSGeometryRepresentation(const std::shared_ptr<nccfdriver::SGeometry_Reader>& sg) { m_simpleGeometryReader = sg; }
         nccfdriver::ncLayer_SG_Metadata& getLayerSGMetadata() { return m_layerSGDefn; }
 
         virtual void ResetReading() override;
@@ -1194,6 +1194,10 @@ bool NCDFIsUnlimitedDim(bool bIsNC4, int cdfid, int nDimId);
 bool NCDFIsUserDefinedType(int ncid, int type);
 
 CPLString NCDFGetGroupFullName(int nGroupId);
+
+CPLErr NCDFResolveVar( int nStartGroupId, const char *pszVar,
+                       int *pnGroupId, int *pnVarId,
+                       bool bMandatory = false );
 
 // Dimension check functions.
 bool NCDFIsVarLongitude( int nCdfId, int nVarId,

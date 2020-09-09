@@ -455,7 +455,7 @@ GDALRasterIOEx( GDALRasterBandH hBand, GDALRWFlag eRWFlag,
  * The following code would efficiently compute a histogram of eight bit
  * raster data.  Note that the final block may be partial ... data beyond
  * the edge of the underlying raster band in these edge blocks is of an
- * undermined value.
+ * undetermined value.
  *
 \code{.cpp}
  CPLErr GetHistogram( GDALRasterBand *poBand, GUIntBig *panHistogram )
@@ -4865,6 +4865,8 @@ void GDALRasterBand::SetValidPercent(GUIntBig nSampleCount, GUIntBig nValidCount
  *
  * Once computed, the statistics will generally be "set" back on the
  * raster band using SetStatistics().
+ *
+ * Cached statistics can be cleared with GDALDataset::ClearStatistics().
  *
  * This method is the same as the C function GDALComputeRasterStatistics().
  *

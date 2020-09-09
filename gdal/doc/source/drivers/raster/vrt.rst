@@ -879,9 +879,8 @@ Using Derived Bands (with pixel functions in Python)
 
 Starting with GDAL 2.2, in addition to pixel functions written in C/C++ as
 documented in the \ref gdal_vrttut_derived_c section, it is possible to use
-pixel functions written in Python. Both
-<a href="https://www.python.org/">CPython</a>
-and <a href="http://www.numpy.org/">NumPy</a> are requirements at run-time.
+pixel functions written in Python. Both `CPython <https://www.python.org/>`_
+and `NumPy <http://www.numpy.org/>`_ are requirements at run-time.
 
 The subelements for VRTRasterBand (whose subclass specification must be
 set to VRTDerivedRasterBand) are :
@@ -909,6 +908,14 @@ The signature of the Python pixel function must have the following arguments:
 - **buf_radius**: radius of the buffer (in pixels) added to the left, right, top and bottom of in_ar / out_ar. This is the value of the optional BufferRadius element that can be set so that the original pixel request is extended by a given amount of pixels.
 - **gt**: geotransform. Array of 6 double values.
 - **kwargs**: dictionary with user arguments defined in PixelFunctionArguments
+
+The provided ``out_ar`` array must be modified in-place. Any value currently
+returned by the pixel function is ignored.
+
+.. note::
+
+    If wanting to fill ``out_ar`` from another array, use the ``out_ar[:] = ...``
+    syntax.
 
 Examples
 ++++++++
@@ -1092,7 +1099,7 @@ directories of the PATH and will try to determine the related shared object
 (it will retry with "python3" if no "python" has been found). If the above
 was not successful, then a predefined list of shared objects names
 will be tried. At the time of writing, the order of versions searched is 2.7,
-3.5, 3.6, 3.7, 3.8, 3.4, 3.3, 3.2. Enabling debug information (CPL_DEBUG=ON) will
+3.5, 3.6, 3.7, 3.8, 3.9, 3.4, 3.3, 3.2. Enabling debug information (CPL_DEBUG=ON) will
 show which Python version is used.
 
 Just-in-time compilation
@@ -1327,16 +1334,14 @@ VRTRasterBands, in addition to the pansharpened bands.
 
 In addition to the above mentioned required PanchroBand and SpectralBand elements,
 the PansharpeningOptions element may have the following children elements :
+
 - **Algorithm**: to specify the pansharpening algorithm. Currently, only WeightedBrovey is supported.
 - **AlgorithmOptions**: to specify the options of the pansharpening algorithm. With WeightedBrovey algorithm, the only supported option is a **Weights** child element whose content must be a comma separated list of real values assigning the weight of each of the declared input spectral bands. There must be as many values as declared input spectral bands.
-- **Resampling**: the resampling kernel used to resample the spectral bands to the resolution of the panchromatic band. Can be one of Cubic (default), Average,
-Near, CubicSpline, Bilinear, Lanczos.
+- **Resampling**: the resampling kernel used to resample the spectral bands to the resolution of the panchromatic band. Can be one of Cubic (default), Average, Near, CubicSpline, Bilinear, Lanczos.
 - **NumThreads**: Number of worker threads. Integer number or ALL_CPUS. If this option is not set, the GDAL_NUM_THREADS configuration option will be queried (its value can also be set to an integer or ALL_CPUS)
 - **BitDepth**: Can be used to specify the bit depth of the panchromatic and spectral bands (e.g. 12). If not specified, the NBITS metadata item from the panchromatic band will be used if it exists.
 - **NoData**: Nodata value to take into account for panchromatic and spectral bands. It will be also used as the output nodata value. If not specified and all input bands have the same nodata value, it will be implicitly used (unless the special None value is put in NoData to prevent that).
-- **SpatialExtentAdjustment**: Can be one of **Union** (default), **Intersection**, **None** or **NoneWithoutWarning**. Controls the behavior when panchromatic
-and spectral bands have not the same geospatial extent. By default, Union will take the union of all spatial extents. Intersection the intersection of all spatial extents.
-None will not proceed to any adjustment at all (might be useful if the geotransform are somehow dummy, and the top-left and bottom-right corners of all bands match), but will emit a warning. NoneWithoutWarning is the same as None, but in a silent way.
+- **SpatialExtentAdjustment**: Can be one of **Union** (default), **Intersection**, **None** or **NoneWithoutWarning**. Controls the behavior when panchromatic and spectral bands have not the same geospatial extent. By default, Union will take the union of all spatial extents. Intersection the intersection of all spatial extents. None will not proceed to any adjustment at all (might be useful if the geotransform are somehow dummy, and the top-left and bottom-right corners of all bands match), but will emit a warning. NoneWithoutWarning is the same as None, but in a silent way.
 
 The below examples creates a VRT dataset with 4 bands. The first band is the
 panchromatic band. The 3 following bands are than red, green, blue pansharpened

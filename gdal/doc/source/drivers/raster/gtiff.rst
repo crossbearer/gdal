@@ -301,8 +301,7 @@ Open options
 -  **NUM_THREADS=number_of_threads/ALL_CPUS**: (From GDAL 2.1) Enable
    multi-threaded compression by specifying the number of worker
    threads. Worth it for slow compression algorithms such as DEFLATE or
-   LZMA. Will be ignored for JPEG. Default is compression in the main
-   thread.
+   LZMA. Default is compression in the main thread.
 
 -  **GEOREF_SOURCES=string**: (GDAL > 2.2) Define which georeferencing
    sources are allowed and their priority order. See
@@ -559,6 +558,10 @@ Starting with GDAL 3.0, subdataset creation is possible by using the
 APPEND_SUBDATASET=YES creation option. The filename passed to Create() /
 CreateCopy() should be the regular filename (not with GTIFF_DIR: syntax.
 Creating overviews on a multi-page TIFF is not supported.
+
+Starting with GDAL 3.2, read-only access to subdataset overviews and masks
+is possible provided that they are referenced by their parent IFD through
+the `TIFFTAG_SUBIFD <https://www.awaresystems.be/imaging/tiff/tifftags/subifds.html>`__ tag.
 
 About JPEG compression of RGB images
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

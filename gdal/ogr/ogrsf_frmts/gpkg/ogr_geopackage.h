@@ -130,6 +130,8 @@ class GDALGeoPackageDataset final : public OGRSQLiteBaseDataSource, public GDALG
 
     bool                m_bTableCreated;
 
+    bool                m_bDateTimeWithTZ = true;
+
     CPLString           m_osTilingScheme;
 
         bool            ComputeTileAndPixelShifts();
@@ -223,6 +225,8 @@ class GDALGeoPackageDataset final : public OGRSQLiteBaseDataSource, public GDALG
         bool                ConvertGpkgSpatialRefSysToExtensionWkt2();
 
         std::map<int, bool> m_oSetGPKGLayerWarnings{};
+
+        void                FixupWrongRTreeTrigger();
 
     public:
                             GDALGeoPackageDataset();
@@ -366,6 +370,7 @@ class OGRGeoPackageLayer CPL_NON_FINAL: public OGRLayer, public IOGRSQLiteGetSpa
 
     sqlite3_stmt        *m_poQueryStatement;
     bool                 bDoStep;
+    bool                 m_bEOF = false;
 
     char                *m_pszFidColumn;
 

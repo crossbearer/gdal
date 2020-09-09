@@ -21,6 +21,11 @@ update, INSERT/UPDATE/DELETE statements can also be run. GDAL is internally usin
 `the Virtual Table Mechanism of SQLite <https://sqlite.org/vtab.html>`_
 and therefore operations like ALTER TABLE are not supported.
 
+If the datasource is SQLite database (GeoPackage, SpatiaLite) then SQLite dialect
+acts as native SQL dialect and Virtual Table Mechanism is not used. It is possible to
+force GDAL to use Virtual Tables even in this case by specifying 
+"-dialect INDIRECT_SQLITE". This should be used only when necessary, since going through the virtual table mechanism might affect performance.
+
 The syntax of the SQL statements is fully the one of the SQLite SQL engine. You can
 refer to the following pages:
 
@@ -54,6 +59,14 @@ the following syntax : "other_datasource_name"."layer_name".
 .. code-block::
 
     SELECT p.*, NAME FROM poly p JOIN "idlink.dbf"."idlink" il USING (eas_id)
+
+If the master datasource is SQLite database (GeoPackage, SpatiaLite) it is necessary to 
+use indirect SQLite dialect. Otherwise additional datasources are never opened but tables to 
+be used in joins are searched from the master database.
+
+.. code-block:: shell
+
+    ogrinfo jointest.gpkg -dialect INDIRECT_SQLITE -sql "SELECT a.ID,b.ID FROM jointest a JOIN \"jointest2.shp\".\"jointest2\" b ON a.ID=b.ID"
 
 The column names that can be used in the result column list, in WHERE, JOIN, ... clauses
 are the field names of the layers. Expressions, SQLite functions can also be used,
@@ -136,8 +149,8 @@ For example we can select the annotation features as:
 Spatialite SQL functions
 ++++++++++++++++++++++++
 
-When GDAL/OGR is build with support for the <a href="http://www.gaia-gis.it/spatialite/">Spatialite</a> library,
-a lot of <a href="http://www.gaia-gis.it/gaia-sins/spatialite-sql-4.3.0.html">extra SQL functions</a>,
+When GDAL/OGR is build with support for the `Spatialite <http://www.gaia-gis.it/spatialite/>`_ library,
+a lot of `extra SQL functions <http://www.gaia-gis.it/gaia-sins/spatialite-sql-4.3.0.html>`_,
 in particular spatial functions, can be used in results column fields, WHERE clauses, etc....
 
 .. code-block::

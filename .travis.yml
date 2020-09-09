@@ -140,38 +140,17 @@ matrix:
       env:
         - BUILD_NAME=trusty_32bit
         - DETAILS=""
-    - os: osx
-      language: objective-c
-      compiler: clang
-      cache:
-        apt: true
-        directories:
-          - $HOME/.ccache
-      env:
-        - BUILD_NAME=osx
-        - DETAILS="debug build, libtool"
 
-    - os: linux
-      compiler: gcc
-      language: cpp
-      sudo: required
-      dist: xenial
-      cache:
-        apt: true
-      env:
-        - BUILD_NAME=csa_part_1
-        - DETAILS="CLang Static Analyzer part 1"
-
-    - os: linux
-      compiler: gcc
-      language: cpp
-      sudo: required
-      dist: xenial
-      cache:
-        apt: true
-      env:
-        - BUILD_NAME=csa_part_2
-        - DETAILS="CLang Static Analyzer part 2"
+#    - os: osx
+#      language: objective-c
+#      compiler: clang
+#      cache:
+#        apt: true
+#        directories:
+#          - $HOME/.ccache
+#      env:
+#        - BUILD_NAME=osx
+#        - DETAILS="debug build, libtool"
 
 before_install:
   - ./gdal/ci/travis/${BUILD_NAME}/before_install.sh
@@ -182,13 +161,15 @@ install:
 script:
   - ./gdal/ci/travis/${BUILD_NAME}/script.sh
 
-# notifications:
+notifications:
+  irc:
+    channels:
+       - "irc.freenode.org#gdal-activity"    
+      #- "irc.freenode.org#gdal"
+    use_notice: true
+    on_success: change
+#
 #   email:
 #     recipients:
 #       - gdal-commits@lists.osgeo.org
-#
-#   irc:
-#     channels:
-#       - "irc.freenode.org#gdal"
-#     use_notice: true
-#     on_success: change
+

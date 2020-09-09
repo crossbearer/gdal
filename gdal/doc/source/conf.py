@@ -85,6 +85,8 @@ html_show_sourcelink = False
 
 html_logo = '../images/gdalicon.png'
 
+html_favicon = '../images/favicon.png'
+
 # -- Options for manual page output ---------------------------------------
 
 # One entry per manual page. List of tuples
@@ -173,6 +175,13 @@ man_pages = [
         'gdal_viewshed',
         u'Calculates a viewshed raster from an input raster DEM for a user defined point',
         [author_tamass],
+        1
+    ),
+    (
+        'programs/gdal_create',
+        'gdal_create',
+        u'Create a raster file (without source dataset)',
+        [author_evenr],
         1
     ),
     (

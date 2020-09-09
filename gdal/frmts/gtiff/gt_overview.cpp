@@ -941,6 +941,8 @@ GTIFFBuildOverviewsEx( const char * pszFilename,
     CPLStringList aosOpenOptions;
     aosOpenOptions.SetNameValue("NUM_THREADS",
                                 CSLFetchNameValue(papszOptions, "NUM_THREADS"));
+    aosOpenOptions.SetNameValue("SPARSE_OK",
+                                CSLFetchNameValue(papszOptions, "SPARSE_OK"));
     aosOpenOptions.SetNameValue("@MASK_OVERVIEW_DATASET",
                                 CSLFetchNameValue(papszOptions, "MASK_OVERVIEW_DATASET"));
     GDALDataset *hODS = GDALDataset::Open( pszFilename,
@@ -1027,12 +1029,20 @@ GTIFFBuildOverviewsEx( const char * pszFilename,
             const double noDataValue = poSrcBand->GetNoDataValue(&bHasNoData);
             if( bHasNoData )
                 poDstBand->SetNoDataValue(noDataValue);
+            std::vector<bool> abDstOverviewAssigned(1 + poDstBand->GetOverviewCount());
 
             for( int i = 0; i < nOverviews && eErr == CE_None; i++ )
             {
+                const bool bDegenerateOverview =
+                    panOverviewListSorted != nullptr &&
+                    (poSrcBand->GetXSize() >> panOverviewListSorted[i]) == 0 &&
+                    (poSrcBand->GetYSize() >> panOverviewListSorted[i]) == 0;
+
                 for( int j = -1; j < poDstBand->GetOverviewCount() &&
                                  eErr == CE_None; j++ )
                 {
+                    if( abDstOverviewAssigned[1+j] )
+                        continue;
                     GDALRasterBand * poOverview =
                             (j < 0 ) ? poDstBand : poDstBand->GetOverview( j );
                     if( poOverview == nullptr )
@@ -1050,11 +1060,16 @@ GTIFFBuildOverviewsEx( const char * pszFilename,
                                                 poOverview->GetYSize(),
                                                 poSrcBand->GetYSize());
 
-                        bMatch = ( nOvFactor == panOverviewListSorted[i]
+                        bMatch = nOvFactor == panOverviewListSorted[i]
                             || nOvFactor == GDALOvLevelAdjust2(
                                                 panOverviewListSorted[i],
                                                 poSrcBand->GetXSize(),
-                                                poSrcBand->GetYSize() ) );
+                                                poSrcBand->GetYSize() )
+                            // Deal with edge cases where overview levels lead to
+                            // degenerate 1x1 overviews
+                            || (bDegenerateOverview &&
+                                poOverview->GetXSize() == 1 &&
+                                poOverview->GetYSize() == 1 );
                     }
                     else
                     {
@@ -1066,22 +1081,31 @@ GTIFFBuildOverviewsEx( const char * pszFilename,
                     }
                     if( bMatch )
                     {
+                        abDstOverviewAssigned[j+1] = true;
                         papapoOverviewBands[iBand][i] = poOverview;
                         if( bHasNoData )
                             poOverview->SetNoDataValue(noDataValue);
                         break;
                     }
                 }
+
                 CPLAssert( papapoOverviewBands[iBand][i] != nullptr );
             }
         }
 
-        if( eErr == CE_None )
-            eErr =
-                GDALRegenerateOverviewsMultiBand(
-                    nBands, papoBandList,
-                    nOverviews, papapoOverviewBands,
-                    pszResampling, pfnProgress, pProgressData );
+        {
+            CPLConfigOptionSetter oSetter(
+                "GDAL_NUM_THREADS",
+                CSLFetchNameValue(papszOptions, "NUM_THREADS"),
+                true);
+
+            if( eErr == CE_None )
+                eErr =
+                    GDALRegenerateOverviewsMultiBand(
+                        nBands, papoBandList,
+                        nOverviews, papapoOverviewBands,
+                        pszResampling, pfnProgress, pProgressData );
+        }
 
         for( int iBand = 0; iBand < nBands; iBand++ )
         {
@@ -1134,15 +1158,23 @@ GTIFFBuildOverviewsEx( const char * pszFilename,
                     (iBand + 1) / static_cast<double>( nBands ),
                     pfnProgress, pProgressData );
 
-            if( eErr == CE_None )
-                eErr =
-                    GDALRegenerateOverviews(
-                        hSrcBand,
-                        nDstOverviews,
-                        reinterpret_cast<GDALRasterBandH *>( papoOverviews ),
-                        pszResampling,
-                        GDALScaledProgress,
-                        pScaledProgressData );
+
+            {
+                CPLConfigOptionSetter oSetter(
+                    "GDAL_NUM_THREADS",
+                    CSLFetchNameValue(papszOptions, "NUM_THREADS"),
+                    true);
+
+                if( eErr == CE_None )
+                    eErr =
+                        GDALRegenerateOverviews(
+                            hSrcBand,
+                            nDstOverviews,
+                            reinterpret_cast<GDALRasterBandH *>( papoOverviews ),
+                            pszResampling,
+                            GDALScaledProgress,
+                            pScaledProgressData );
+            }
 
             GDALDestroyScaledProgress( pScaledProgressData );
         }

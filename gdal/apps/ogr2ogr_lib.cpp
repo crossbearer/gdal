@@ -943,6 +943,8 @@ class GCPCoordTransformation : public OGRCoordinateTransformation
             poSRS->Reference();
     }
 
+    GCPCoordTransformation& operator= (const GCPCoordTransformation&) = delete;
+
 public:
 
     void               *hTransformArg;
@@ -1015,6 +1017,8 @@ class CompositeCT : public OGRCoordinateTransformation
         bOwnCT1(true),
         poCT2(other.poCT2 ? other.poCT2->Clone(): nullptr),
         bOwnCT2(true) {}
+
+    CompositeCT& operator= (const CompositeCT&) = delete;
 
 public:
 
@@ -4972,11 +4976,39 @@ static void RemoveSQLComments(char*& pszSQL)
     CPLString osSQL;
     for( char** papszIter = papszLines; papszIter && *papszIter; ++papszIter )
     {
-        if( !STARTS_WITH(*papszIter, "--") )
+        const char* pszLine = *papszIter;
+        char chQuote = 0;
+        int i = 0;
+        for(; pszLine[i] != '\0'; ++i )
         {
-            osSQL += *papszIter;
-            osSQL += " ";
+            if( chQuote )
+            {
+                if( pszLine[i] == chQuote )
+                {
+                    if( pszLine[i+1] == chQuote )
+                    {
+                        i++;
+                    }
+                    else
+                    {
+                        chQuote = 0;
+                    }
+                }
+            }
+            else if( pszLine[i] == '\'' || pszLine[i] == '"' )
+            {
+                chQuote = pszLine[i];
+            }
+            else if( pszLine[i] == '-' && pszLine[i+1] == '-' )
+            {
+                break;
+            }
         }
+        if( i > 0 )
+        {
+            osSQL.append(pszLine, i);
+        }
+        osSQL += ' ';
     }
     CSLDestroy(papszLines);
     CPLFree(pszSQL);
