@@ -296,7 +296,9 @@ bool OGROAPIFDataset::Download(
     papszOptions =
         CSLAddString(papszOptions, CPLSPrintf("PERSISTENT=OAPIF:%p", this));
     CPLString osURLWithQueryParameters(osURL);
-    if( !m_osUserQueryParams.empty() )
+    if( !m_osUserQueryParams.empty() &&
+        osURL.find('?' + m_osUserQueryParams) == std::string::npos &&
+        osURL.find('&' + m_osUserQueryParams) == std::string::npos )
     {
         if( osURL.find('?') == std::string::npos )
         {
@@ -1598,6 +1600,7 @@ GIntBig OGROAPIFLayer::GetFeatureCount(int bForce)
                 if( psDoc )
                 {
                     CPLXMLTreeCloser oCloser(psDoc);
+                    CPL_IGNORE_RET_VAL(oCloser);
                     CPLStripXMLNamespace(psDoc, nullptr, true);
                     CPLString osNumberMatched =
                         CPLGetXMLValue(psDoc,
@@ -2343,7 +2346,7 @@ int OGROAPIFLayer::TestCapability(const char* pszCap)
     {
         return TRUE;
     }
-    // Don't advertize OLCRandomRead as it requires a GET per feature
+    // Don't advertise OLCRandomRead as it requires a GET per feature
     return FALSE;
 }
 
