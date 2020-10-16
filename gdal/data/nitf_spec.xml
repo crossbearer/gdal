@@ -1434,7 +1434,70 @@
         </loop>
     </tre>
 
-    <tre name="RSMAPB"
+    <tre name="RSMAPB" minlength="321" maxlength="28411" location="image">
+        <field name="IID" length="80" type="string"/>
+        <field name="EDITION" length="40" type="string"/>
+        <field name="TID" length="40" type="string"/>
+        <!--RSM Adjustable Parameter Identification of the associated image-->
+        <field name="NPAR" length="2" type="integer" minval="1" maxval="36"/>
+        <field name="APTYP" length="1" type="string"/>
+        <field name="LOCTYP" length="1" type="string"/>
+        <field name="NSFX" length="21" type="real"/> <!--meters or pixels-->
+        <field name="NSFY" length="21" type="real"/> <!--meters or pixels-->
+        <field name="NSFZ" length="21" type="real"/> <!--meters-->
+        <field name="NOFFX" length="21" type="real"/> <!--meters or pixels-->
+        <field name="NOFFY" length="21" type="real"/> <!--meters or pixels-->
+        <field name="NOFFZ" length="21" type="real"/> <!--meters-->
+        <if cond="LOCTYP=R">
+            <field name="XUOL" length="21" type="real"/> <!--meters-->
+            <field name="YUOL" length="21" type="real"/> <!--meters-->
+            <field name="ZUOL" length="21" type="real"/> <!--meters-->
+            <field name="XUXL" length="21" type="real" minval="-1" maxval="1"/>
+            <field name="XUYL" length="21" type="real" minval="-1" maxval="1"/>
+            <field name="XUZL" length="21" type="real" minval="-1" maxval="1"/>
+            <field name="YUXL" length="21" type="real" minval="-1" maxval="1"/>
+            <field name="YUYL" length="21" type="real" minval="-1" maxval="1"/>
+            <field name="YUZL" length="21" type="real" minval="-1" maxval="1"/>
+            <field name="ZUXL" length="21" type="real" minval="-1" maxval="1"/>
+            <field name="ZUYL" length="21" type="real" minval="-1" maxval="1"/>
+            <field name="ZUZL" length="21" type="real" minval="-1" maxval="1"/>
+        </if>
+        <!--RSM Adjustable Parameter Basis Option-->
+        <field name="APBASE" length="1" type="string"/>
+        <!--Image-Space Adjustable Parameters-->
+        <if cond="APTYP=I">
+            <field name="NISAP" length="2" type="integer" minval="1" maxval="99"/>
+            <field name="NISAPR" length="2" type="integer" minval="0" maxval="99"/>
+            <loop counter="NISAPR" md_prefix="NISAPR_%02d_">
+                <field name="XPWRR" length="1" type="integer" minval="0" maxval="5"/>
+                <field name="YPWRR" length="1" type="integer" minval="0" maxval="5"/>
+                <field name="ZPWRR" length="1" type="integer" minval="0" maxval="5"/>
+            </loop>
+            <field name="NISAPC" length="2" type="integer" minval="0" maxval="99"/>
+            <loop counter="NISAPC" md_prefix="NISAPC_%02d_">
+                <field name="XPWRC" length="1" type="integer" minval="0" maxval="5"/>
+                <field name="YPWRC" length="1" type="integer" minval="0" maxval="5"/>
+                <field name="ZPWRC" length="1" type="integer" minval="0" maxval="5"/>
+            </loop>
+        </if>
+        <!-- Ground-Space Adjustable Parameters-->
+        <if cond="APTYP=G">
+            <field name="NGSAP" length="2" type="integer" minval="1" maxval="16"/>
+            <loop counter="NGSAP" md_prefix="NGSAP_%02d_">
+                <field name="GDSAPID" length="4" type="string"/>
+            </loop>
+        </if>
+        <if cond="APBASE=Y">
+            <field name="NBASIS" length="2" type="integer" minval="1" maxval="99"/>
+            <loop counter="NPAR*NBASIS" md_prefix="A_%04d_">
+                <field name="AEL" length="21" type="real"/>
+            </loop>
+        </if>
+        <!--RSM Adjustment Vector Values-->
+        <loop counter="NPAR" md_prefix="PAR_%02d_">
+            <field name="PARVAL" length="21" type="real"/>
+        </loop>
+    </tre>
 
     <tre name="RSMDCA" minlength="597" maxlength="99988" location="image">
         <field name="IID" length="80" type="string"/>
@@ -1500,7 +1563,89 @@
         </loop>
     </tre>
 
-    <tre name="RSMDCB"
+    <tre name="RSMDCB" minlength="269" maxlength="99985" location="image">
+        <field name="IID" length="80" type="string"/>
+        <field name="EDITION" length="40" type="string"/>
+        <field name="TID" length="40" type="string"/>
+        <!-- Cross-covariance block information-->
+        <field name="NROWCB" length ="2" type="integer"/>
+        <!-- Number of images refernced by cross-covariance blocks-->
+        <field name="NIMGE" length="3" type="integer" maxval="999"/>
+        <loop counter="NIMGE" md_prefix="IMGE_%03d_">
+            <field name="IID1" length="80" type="string"/>
+            <field name="NCOLCB" length="2" type="integer" maxval="36" minval="1"/>
+        </loop>
+        <field name="INCAPD" length="1" type="string"/>
+        <if cond="INCAPD=Y">
+            <!--RSM Adjustable Parameter Identification-->
+            <field name="NPAR" length="2" type="integer" minval="1" maxval="36"/>
+            <field name="APTYP" length="1" type="string"/>
+            <field name="LOCTYP" length="1" type="string"/>
+            <!--Normalization Factor for Local System-->
+            <field name="NSFX" length="21" type="real"/> <!--meters or pixels-->
+            <field name="NSFY" length="21" type="real"/> <!--meters or pixels-->
+            <field name="NSFZ" length="21" type="real"/> <!--meters-->
+            <field name="NOFFX" length="21" type="real"/> <!--meters or pixels-->
+            <field name="NOFFY" length="21" type="real"/> <!--meters or pixels-->
+            <field name="NOFFZ" length="21" type="real"/> <!--meters-->
+            <!--Local Recatnagular Ground Coordinates Detailed Definiton for Associated Image-->
+            <if cond="LOCTYP=R">
+                <field name="XUOL" length="21" type="real"/> <!--meters-->
+                <field name="YUOL" length="21" type="real"/> <!--meters-->
+                <field name="ZUOL" length="21" type="real"/> <!--meters-->
+                <field name="XUXL" length="21" type="real" minval="-1" maxval="1"/>
+                <field name="XUYL" length="21" type="real" minval="-1" maxval="1"/>
+                <field name="XUZL" length="21" type="real" minval="-1" maxval="1"/>
+                <field name="YUXL" length="21" type="real" minval="-1" maxval="1"/>
+                <field name="YUYL" length="21" type="real" minval="-1" maxval="1"/>
+                <field name="YUZL" length="21" type="real" minval="-1" maxval="1"/>
+                <field name="ZUXL" length="21" type="real" minval="-1" maxval="1"/>
+                <field name="ZUYL" length="21" type="real" minval="-1" maxval="1"/>
+                <field name="ZUZL" length="21" type="real" minval="-1" maxval="1"/>
+            </if>
+            <!--RSM Adjustable Parameters Basis Option-->
+            <field name="APBASE" length="1" type="string"/>
+            <!--Image-Space Adjustable Parameters-->
+            <if cond="APTYP=I">
+                <field name="NISAP" length="2" type="integer" minval="1" maxval="99"/>
+                <field name="NISAPR" length="2" type="integer" minval="0" maxval="99"/>
+                <loop counter="NISAPR" md_prefix="NISAPR_%02d_">
+                    <field name="XPWRR" length="1" type="integer" minval="0" maxval="5"/>
+                    <field name="YPWRR" length="1" type="integer" minval="0" maxval="5"/>
+                    <field name="ZPWRR" length="1" type="integer" minval="0" maxval="5"/>
+                </loop>
+                <field name="NISAPC" length="2" type="integer" minval="0" maxval="99"/>
+                <loop counter="NISAPC" md_prefix="NISAPC_%02d_">
+                    <field name="XPWRC" length="1" type="integer" minval="0" maxval="5"/>
+                    <field name="YPWRC" length="1" type="integer" minval="0" maxval="5"/>
+                    <field name="ZPWRC" length="1" type="integer" minval="0" maxval="5"/>
+                </loop>
+            </if>
+            <!--Ground-Space Adjustable Parameters-->
+            <if cond="APTYP=G">
+                <field name="NGSAP" length="2" type="integer" minval="1" maxval="16"/>
+                <loop counter="NGSAP" md_prefix="NGSAP_%02d_">
+                    <field name="GSAPID" length="4" type="string"/>
+                </loop>
+            </if>
+            <if cond="APBASE=Y">
+                <field name="NBASIS" length="2" type="integer" minval="1" maxval="99"/>
+                <loop counter="NPAR*NBASIS" md_prefix="A_%04d_">
+                    <field name="AEL" length="21" type="real"/>
+                </loop>
+            </if>
+        </if>
+        <!--Direct Error Covariance-->
+        <loop counter="NIMGE" md_prefix="IMGE_%03d_">
+            <loop counter="NROWCB*NCOLCB" md_prefix="CB_%04_">
+                <field name="CRSCOV" length="21" type="real"/>
+            </loop>
+        </loop>
+    </tre>
+
+
+
+
 
     <tre name="RSMECA" minlength="354" maxlength="42864" location="image">
         <field name="IID" length="80" type="string"/>
