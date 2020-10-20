@@ -3290,7 +3290,7 @@ def test_nitf_RSMAPA():
 #    <tre name="RSMAPB" minlength="321" maxlength="28411" location="image">
 #    <tre name="RSMDCB" minlength="269" maxlength="99985" location="image">
 #    <tre name="RSMECB" minlength="371" maxlength="98487" location="image">
-#    <tre name="RSMGIA" length="591" location="image">
+
 ###############################################################################
 # Test parsing RSMGIA TRE (STDI-0002-1-v5.0 App U) Test data pulled from https://gwg.nga.mil/ntb/baseline/software/testfile/rsm/SampleFiles/FrameSet4/RSM_Core_Files/Case4_parsed.txt
 
@@ -3345,8 +3345,173 @@ def test_nitf_RSMGIA():
 """
     assert data == expected_data
 
+###############################################################################
+# Test parsing RSMPCA TRE (STDI-0002-1-v5.0 App U) Test data pulled from https://gwg.nga.mil/ntb/baseline/software/testfile/rsm/SampleFiles/FrameSet5/RSM_Core_Files/Case5_parsed.txt
 
-#    <tre name="RSMPCA" minlength="486" maxlength="18546" location="image">
+def test_nitf_RSMPCA():
+    tre_data = "TRE=HEX/RSMPCA=" + hex_string("2_8                                                                             ") + \
+        hex_string("1101217914-2                            001001+6.19186806602187E-01+3.72771990557440E-01+4.64600000000000E+03") + \
+        hex_string("+4.56100000000000E+03+4.24096939577019E+00+5.79158321291012E-01-6.74864824209362E+00+5.59920000000000E+03") + \
+        hex_string("+5.49720000000000E+03+5.83421668078010E-04+4.66059641384187E-04+1.00000000000186E+03111008+4.61255322175402E-01") + \
+        hex_string("+1.47720777603914E+00+2.13600702305268E-02+0.00000000000000E+00+3.88751694388177E-01+0.00000000000000E+00") + \
+        hex_string("+0.00000000000000E+00+0.00000000000000E+00111008+1.00000000000000E+00+5.08155386598166E-02-2.96977305437078E-02") + \
+        hex_string("+0.00000000000000E+00-4.47362569751380E-01+0.00000000000000E+00+0.00000000000000E+00+0.00000000000000E+00") + \
+        hex_string("111008+3.64152616081756E-01-3.70746186946868E-02+1.49556757502953E+00+0.00000000000000E+00+3.59800851214419E-01") + \
+        hex_string("+0.00000000000000E+00+0.00000000000000E+00+0.00000000000000E+00111008+1.00000000000000E+00+5.06210125516810E-02") + \
+        hex_string("-2.98450105075734E-02+0.00000000000000E+00-4.47409831082355E-01+0.00000000000000E+00+0.00000000000000E+00") + \
+        hex_string("+0.00000000000000E+00")
+
+    ds = gdal.GetDriverByName('NITF').Create('/vsimem/nitf_rsmpca.ntf', 1, 1, options=[tre_data])
+    ds = None
+
+    ds = gdal.Open('/vsimem/nitf_rsmpca.ntf')
+    data = ds.GetMetadata('xml:TRE')[0]
+    ds = None
+
+    gdal.GetDriverByName('NITF').Delete('/vsimem/nitf_rsmpca.ntf')
+
+    expected_data="""<tres>
+  <tre name="RSMPCA" location="image">
+    <field name="IID" value="2_8" />
+    <field name="EDITION" value="1101217914-2" />
+    <field name="RSN" value="001" />
+    <field name="CSN" value="001" />
+    <field name="RFEP" value="+6.19186806602187E-01" />
+    <field name="CFEP" value="+3.72771990557440E-01" />
+    <field name="RNRMO" value="+4.64600000000000E+03" />
+    <field name="CNRMO" value="+4.56100000000000E+03" />
+    <field name="XNRMO" value="+4.24096939577019E+00" />
+    <field name="YNRMO" value="+5.79158321291012E-01" />
+    <field name="ZNRMO" value="-6.74864824209362E+00" />
+    <field name="RNRMSF" value="+5.59920000000000E+03" />
+    <field name="CNRMSF" value="+5.49720000000000E+03" />
+    <field name="XNRMSF" value="+5.83421668078010E-04" />
+    <field name="YNRMSF" value="+4.66059641384187E-04" />
+    <field name="ZNRMSF" value="+1.00000000000186E+03" />
+    <field name="RNPWRX" value="1" />
+    <field name="RNPWRY" value="1" />
+    <field name="RNPWRZ" value="1" />
+    <field name="RNTRMS" value="008" />
+    <repeated name="RNPCF" number="8">
+      <group index="0">
+        <field name="RNPCF" value="+4.61255322175402E-01" />
+      </group>
+      <group index="1">
+        <field name="RNPCF" value="+1.47720777603914E+00" />
+      </group>
+      <group index="2">
+        <field name="RNPCF" value="+2.13600702305268E-02" />
+      </group>
+      <group index="3">
+        <field name="RNPCF" value="+0.00000000000000E+00" />
+      </group>
+      <group index="4">
+        <field name="RNPCF" value="+3.88751694388177E-01" />
+      </group>
+      <group index="5">
+        <field name="RNPCF" value="+0.00000000000000E+00" />
+      </group>
+      <group index="6">
+        <field name="RNPCF" value="+0.00000000000000E+00" />
+      </group>
+      <group index="7">
+        <field name="RNPCF" value="+0.00000000000000E+00" />
+      </group>
+    </repeated>
+    <field name="RDPWRX" value="1" />
+    <field name="RDPWRY" value="1" />
+    <field name="RDPWRZ" value="1" />
+    <field name="RDTRMS" value="008" />
+    <repeated name="RDPCF" number="8">
+      <group index="0">
+        <field name="RDPCF" value="+1.00000000000000E+00" />
+      </group>
+      <group index="1">
+        <field name="RDPCF" value="+5.08155386598166E-02" />
+      </group>
+      <group index="2">
+        <field name="RDPCF" value="-2.96977305437078E-02" />
+      </group>
+      <group index="3">
+        <field name="RDPCF" value="+0.00000000000000E+00" />
+      </group>
+      <group index="4">
+        <field name="RDPCF" value="-4.47362569751380E-01" />
+      </group>
+      <group index="5">
+        <field name="RDPCF" value="+0.00000000000000E+00" />
+      </group>
+      <group index="6">
+        <field name="RDPCF" value="+0.00000000000000E+00" />
+      </group>
+      <group index="7">
+        <field name="RDPCF" value="+0.00000000000000E+00" />
+      </group>
+    </repeated>
+    <field name="CNPWRX" value="1" />
+    <field name="CNPWRY" value="1" />
+    <field name="CNPWRZ" value="1" />
+    <field name="CNTRMS" value="008" />
+    <repeated name="CNPCF" number="8">
+      <group index="0">
+        <field name="CNPCF" value="+3.64152616081756E-01" />
+      </group>
+      <group index="1">
+        <field name="CNPCF" value="-3.70746186946868E-02" />
+      </group>
+      <group index="2">
+        <field name="CNPCF" value="+1.49556757502953E+00" />
+      </group>
+      <group index="3">
+        <field name="CNPCF" value="+0.00000000000000E+00" />
+      </group>
+      <group index="4">
+        <field name="CNPCF" value="+3.59800851214419E-01" />
+      </group>
+      <group index="5">
+        <field name="CNPCF" value="+0.00000000000000E+00" />
+      </group>
+      <group index="6">
+        <field name="CNPCF" value="+0.00000000000000E+00" />
+      </group>
+      <group index="7">
+        <field name="CNPCF" value="+0.00000000000000E+00" />
+      </group>
+    </repeated>
+    <field name="CDPWRX" value="1" />
+    <field name="CDPWRY" value="1" />
+    <field name="CDPWRZ" value="1" />
+    <field name="CDTRMS" value="008" />
+    <repeated name="CDPCF" number="8">
+      <group index="0">
+        <field name="CDPCF" value="+1.00000000000000E+00" />
+      </group>
+      <group index="1">
+        <field name="CDPCF" value="+5.06210125516810E-02" />
+      </group>
+      <group index="2">
+        <field name="CDPCF" value="-2.98450105075734E-02" />
+      </group>
+      <group index="3">
+        <field name="CDPCF" value="+0.00000000000000E+00" />
+      </group>
+      <group index="4">
+        <field name="CDPCF" value="-4.47409831082355E-01" />
+      </group>
+      <group index="5">
+        <field name="CDPCF" value="+0.00000000000000E+00" />
+      </group>
+      <group index="6">
+        <field name="CDPCF" value="+0.00000000000000E+00" />
+      </group>
+      <group index="7">
+        <field name="CDPCF" value="+0.00000000000000E+00" />
+      </group>
+    </repeated>
+  </tre>
+</tres>
+"""
+    assert data == expected_data
 #    <tre name="RSMPIA" length="591" location="image">
   
 
