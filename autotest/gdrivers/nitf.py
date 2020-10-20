@@ -3715,8 +3715,61 @@ def test_nitf_RSMPCA():
 </tres>
 """
     assert data == expected_data
-#    <tre name="RSMPIA" length="591" location="image">
-  
+###############################################################################
+# Test parsing RSMPCA TRE (STDI-0002-1-v5.0 App U) Test data pulled from https://gwg.nga.mil/ntb/baseline/software/testfile/rsm/SampleFiles/FrameSet5/RSM_Core_Files/Case5_parsed.txt
+
+def test_nitf_RSMPCA():
+
+    tre_data = "TRE=HEX/RSMPIA=" + hex_string("2_8                                                                             ") + \
+        hex_string("1101217914-2                            -1.37241587646741E+10+6.80345003035694E+09-2.53961725272867E+09") + \
+        hex_string("-2.73740874871126E+04-8.41052141609109E+08+5.97072375992576E+08+6.42450733136118E+03+6.77395740580080E+06") + \
+        hex_string("+2.27081764262021E+02+1.03024536087538E-03-1.99837981040581E+09+4.46286444870403E+08+3.61714766643827E+09") + \
+        hex_string("-3.62940014004744E+03+1.95441015791188E+07-1.05767897568751E+09-2.69030105715253E+02+7.66625782038074E+08") + \
+        hex_string("+8.24211130197391E+03+9.01748615982117E-04001001001+9.29200000000000E+03+9.12200000000000E+03")
+
+    ds = gdal.GetDriverByName('NITF').Create('/vsimem/nitf_rsmpia.ntf', 1, 1, options=[tre_data])
+    ds = None
+
+    ds = gdal.Open('/vsimem/nitf_rsmpia.ntf')
+    data = ds.GetMetadata('xml:TRE')[0]
+    ds = None
+
+    gdal.GetDriverByName('NITF').Delete('/vsimem/nitf_rsmpia.ntf')
+
+    expected_data="""<tres>
+  <tre name="RSMPIA" location="image">
+    <field name="IID" value="2_8" />
+    <field name="EDITION" value="1101217914-2" />
+    <field name="R0" value="-1.37241587646741E+10" />
+    <field name="RX" value="+6.80345003035694E+09" />
+    <field name="RY" value="-2.53961725272867E+09" />
+    <field name="RZ" value="-2.73740874871126E+04" />
+    <field name="RXX" value="-8.41052141609109E+08" />
+    <field name="RXY" value="+5.97072375992576E+08" />
+    <field name="RXZ" value="+6.42450733136118E+03" />
+    <field name="RYY" value="+6.77395740580080E+06" />
+    <field name="RYZ" value="+2.27081764262021E+02" />
+    <field name="RZZ" value="+1.03024536087538E-03" />
+    <field name="C0" value="-1.99837981040581E+09" />
+    <field name="CX" value="+4.46286444870403E+08" />
+    <field name="CY" value="+3.61714766643827E+09" />
+    <field name="CZ" value="-3.62940014004744E+03" />
+    <field name="CXX" value="+1.95441015791188E+07" />
+    <field name="CXY" value="-1.05767897568751E+09" />
+    <field name="CXZ" value="-2.69030105715253E+02" />
+    <field name="CYY" value="+7.66625782038074E+08" />
+    <field name="CYZ" value="+8.24211130197391E+03" />
+    <field name="CZZ" value="+9.01748615982117E-04" />
+    <field name="RNIS" value="001" />
+    <field name="CNIS" value="001" />
+    <field name="TNIS" value="001" />
+    <field name="RSSIZ" value="+9.29200000000000E+03" />
+    <field name="CSSIZ" value="+9.12200000000000E+03" />
+  </tre>
+</tres>
+"""
+    assert data == expected_data
+
 
 
 ###############################################################################
