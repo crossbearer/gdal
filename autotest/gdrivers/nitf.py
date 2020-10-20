@@ -3289,7 +3289,48 @@ def test_nitf_RSMAPA():
 
 #    <tre name="RSMAPB" minlength="321" maxlength="28411" location="image">
 #    <tre name="RSMDCB" minlength="269" maxlength="99985" location="image">
-#    <tre name="RSMECB" minlength="371" maxlength="98487" location="image">
+###############################################################################
+# Test parsing RSMECB TRE (STDI-0002-1-v5.0 App U) 
+
+def test_nitf_RSMECB():
+    tre_data = "TRE=HEX/RSMECB=" + hex_string("2_8                                                                             ") + \
+        hex_string("1101217914-2                            1101222317-1                            NY+0.00000000000000E+00+0.00000000000000E+00") + \
+        hex_string("+0.00000000000000E+00Y+0.00000000000001E-99+0.00000000000001E-99+0.00000000000000E+00+0.00000000000001E-99+0.00000000000001E-99") + \
+        hex_string("+0.00000000000001E-99+0.00000000000000E+00+0.00000000000001E-99")
+
+    ds = gdal.GetDriverByName('NITF').Create('/vsimem/nitf_rsmecb.ntf', 1, 1, options=[tre_data])
+    ds = None
+
+    ds = gdal.Open('/vsimem/nitf_rsmecb.ntf')
+    data = ds.GetMetadata('xml:TRE')[0]
+    ds = None
+
+    gdal.GetDriverByName('NITF').Delete('/vsimem/nitf_rsmecb.ntf')
+
+    expected_data="""<tres>
+  <tre name="RSMECB" location="image">
+    <field name="IID" value="2_8" />
+    <field name="EDITION" value="1101217914-2" />
+    <field name="TID" value="1101222317-1" />
+    <field name="INCLIC" value="N" />
+    <field name="INCLUC" value="Y" />
+    <field name="URR" value="+0.00000000000000E+00" />
+    <field name="URC" value="+0.00000000000000E+00" />
+    <field name="UCC" value="+0.00000000000000E+00" />
+    <field name="UACSMC" value="Y" />
+    <field name="UACR" value="+0.00000000000001E-99" />
+    <field name="UALPCR" value="+0.00000000000001E-99" />
+    <field name="UBETCR" value="+0.00000000000000E+00" />
+    <field name="UTCR" value="+0.00000000000001E-99" />
+    <field name="UACC" value="+0.00000000000001E-99" />
+    <field name="UALPCC" value="+0.00000000000001E-99" />
+    <field name="UBETCC" value="+0.00000000000000E+00" />
+    <field name="UTCC" value="+0.00000000000001E-99" />
+  </tre>
+</tres>
+"""
+
+    assert data == expected_data
 
 ###############################################################################
 # Test parsing RSMGIA TRE (STDI-0002-1-v5.0 App U) Test data pulled from https://gwg.nga.mil/ntb/baseline/software/testfile/rsm/SampleFiles/FrameSet4/RSM_Core_Files/Case4_parsed.txt
