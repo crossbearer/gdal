@@ -12104,7 +12104,7 @@ static void GTiffSetDeflateSubCodec(TIFF* hTIFF)
     (void)hTIFF;
 
 #if defined(TIFFTAG_DEFLATE_SUBCODEC) && defined(LIBDEFLATE_SUPPORT)
-    // Mostly for strict reproducability purposes
+    // Mostly for strict reproducibility purposes
     if( EQUAL(CPLGetConfigOption("GDAL_TIFF_DEFLATE_SUBCODEC", ""), "ZLIB") )
     {
         TIFFSetField(hTIFF, TIFFTAG_DEFLATE_SUBCODEC,
@@ -18741,6 +18741,17 @@ CPLErr GTiffDataset::GetGeoTransform( double * padfTransform )
 
     if( !m_bGeoTransformValid )
         return CE_Failure;
+
+    // Same logic as in the .gtx driver, for the benefit of GDALOpenVerticalShiftGrid()
+    // when used with PROJ-data's US geoids.
+    if( CPLFetchBool(papszOpenOptions,
+                                "SHIFT_ORIGIN_IN_MINUS_180_PLUS_180", false) )
+    {
+        if( padfTransform[0] < -180.0 - padfTransform[1] )
+            padfTransform[0] += 360.0;
+        else if( padfTransform[0] > 180.0 )
+            padfTransform[0] -= 360.0;
+    }
 
     return CE_None;
 }
