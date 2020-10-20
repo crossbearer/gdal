@@ -1759,7 +1759,7 @@
                 <field name="ACSMC" length="1" type="string"/>
                 <if cond="ACSMC=N">
                     <field name="NCSEG" length="1" minval="2" maxval="9" type="integer"/>
-                    <loop counter="NCSEG" md_prefix="SEG_%01d_"/>
+                    <loop counter="NCSEG" md_prefix="SEG_%01d_">
                         <field name="CORSEG" length="21" type="real" minval="-1" maxval="1"/>
                         <field name="TAUSEG" length="21" type="real" minval="0"/> <!--seconds-->
                     </loop>

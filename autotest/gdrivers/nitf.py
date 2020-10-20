@@ -3186,6 +3186,117 @@ def test_nitf_read_C4():
     cs = ds.GetRasterBand(1).Checksum()
     assert cs == 53599
 
+
+###############################################################################
+# Test parsing RSMAPA TRE (STDI-0002-1-v5.0 App U) Test data pulled from https://gwg.nga.mil/ntb/baseline/software/testfile/rsm/SampleFiles/FrameSet6/RSM_Core_Files/Case6_parsed.txt
+
+def test_nitf_RSMAPA():
+    tre_data = "TRE=HEX/RSMAPA=" + hex_string("2_8                                                                             ") + \
+        hex_string("1097686989-2                            1097686989-1                            06-2.42965895449297E+06") + \
+        hex_string("-4.76049894293300E+06+3.46898407315533E+06+8.90698769551156E-01+2.48664813021570E-01-3.80554217799520E-01") + \
+        hex_string("-4.54593996792805E-01+4.87215943350720E-01-7.45630553709282E-01+0.00000000000000E+00+8.37129879594448E-01") + \
+        hex_string("+5.47004172461403E-01000000000000000000000000000000000000000001020304050600000000000000000000") + \
+        hex_string("+2.14864927398118E-03+8.13250971606882E-04-2.12527913083991E-03-7.19938155035748E-08-1.72388511227144E-07") + \
+        hex_string("-5.44523557060048E-07") 
+
+    ds = gdal.GetDriverByName('NITF').Create('/vsimem/nitf_rsmapa.ntf', 1, 1, options=[tre_data])
+    ds = None
+
+    ds = gdal.Open('/vsimem/nitf_rsmapa.ntf')
+    data = ds.GetMetadata('xml:TRE')[0]
+    ds = None
+
+    gdal.GetDriverByName('NITF').Delete('/vsimem/nitf_rsmapa.ntf')
+
+    expected_data="""<tres>
+  <tre name="RSMAPA" location="image">
+    <field name="IID" value="2_8" />
+    <field name="EDITION" value="1097686989-2" />
+    <field name="TID" value="1097686989-1" />
+    <field name="NPAR" value="06" />
+    <field name="XUOL" value="-2.42965895449297E+06" />
+    <field name="YUOL" value="-4.76049894293300E+06" />
+    <field name="ZUOL" value="+3.46898407315533E+06" />
+    <field name="XUXL" value="+8.90698769551156E-01" />
+    <field name="XUYL" value="+2.48664813021570E-01" />
+    <field name="XUZL" value="-3.80554217799520E-01" />
+    <field name="YUXL" value="-4.54593996792805E-01" />
+    <field name="YUYL" value="+4.87215943350720E-01" />
+    <field name="YUZL" value="-7.45630553709282E-01" />
+    <field name="ZUXL" value="+0.00000000000000E+00" />
+    <field name="ZUYL" value="+8.37129879594448E-01" />
+    <field name="ZUZL" value="+5.47004172461403E-01" />
+    <field name="IRO" value="00" />
+    <field name="IRX" value="00" />
+    <field name="IRY" value="00" />
+    <field name="IRZ" value="00" />
+    <field name="IRXX" value="00" />
+    <field name="IRXY" value="00" />
+    <field name="IRXZ" value="00" />
+    <field name="IRYY" value="00" />
+    <field name="IRYZ" value="00" />
+    <field name="IRZZ" value="00" />
+    <field name="IC0" value="00" />
+    <field name="ICX" value="00" />
+    <field name="ICY" value="00" />
+    <field name="ICZ" value="00" />
+    <field name="ICXX" value="00" />
+    <field name="ICXY" value="00" />
+    <field name="ICXZ" value="00" />
+    <field name="ICYY" value="00" />
+    <field name="ICYZ" value="00" />
+    <field name="ICZZ" value="00" />
+    <field name="GXO" value="01" />
+    <field name="GYO" value="02" />
+    <field name="GZO" value="03" />
+    <field name="GXR" value="04" />
+    <field name="GYR" value="05" />
+    <field name="GZR" value="06" />
+    <field name="GS" value="00" />
+    <field name="GXX" value="00" />
+    <field name="GXY" value="00" />
+    <field name="GXZ" value="00" />
+    <field name="GYX" value="00" />
+    <field name="GYY" value="00" />
+    <field name="GYZ" value="00" />
+    <field name="GZX" value="00" />
+    <field name="GZY" value="00" />
+    <field name="GZZ" value="00" />
+    <repeated name="PAR" number="6">
+      <group index="0">
+        <field name="PARVAL" value="+2.14864927398118E-03" />
+      </group>
+      <group index="1">
+        <field name="PARVAL" value="+8.13250971606882E-04" />
+      </group>
+      <group index="2">
+        <field name="PARVAL" value="-2.12527913083991E-03" />
+      </group>
+      <group index="3">
+        <field name="PARVAL" value="-7.19938155035748E-08" />
+      </group>
+      <group index="4">
+        <field name="PARVAL" value="-1.72388511227144E-07" />
+      </group>
+      <group index="5">
+        <field name="PARVAL" value="-5.44523557060048E-07" />
+      </group>
+    </repeated>
+  </tre>
+</tres>
+"""
+    assert data == expected_data
+
+#    <tre name="RSMAPB" minlength="321" maxlength="28411" location="image">
+#    <tre name="RSMDCB" minlength="269" maxlength="99985" location="image">
+#    <tre name="RSMECB" minlength="371" maxlength="98487" location="image">
+#     <tre name="RSMGGA" minlength="390" maxlength="99988" location="image">
+#    <tre name="RSMGIA" length="591" location="image">
+#    <tre name="RSMPCA" minlength="486" maxlength="18546" location="image">
+#    <tre name="RSMPIA" length="591" location="image">
+  
+
+
 ###############################################################################
 # Test reading a file with a SENSRB TRE
 
