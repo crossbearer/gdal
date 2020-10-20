@@ -1643,10 +1643,6 @@
         </loop>
     </tre>
 
-
-
-
-
     <tre name="RSMECA" minlength="354" maxlength="42864" location="image">
         <field name="IID" length="80" type="string"/>
         <field name="EDITION" length="40" type="string"/>
@@ -1862,8 +1858,6 @@
                 <field name="UTCC" length="21" type="real" minval="0"/> <!--seconds-->
             </if>
         </if>
-    </tre>
-
     </tre>
 
     <tre name="RSMGGA" minlength="390" maxlength="99988" location="image">
