@@ -3290,8 +3290,62 @@ def test_nitf_RSMAPA():
 #    <tre name="RSMAPB" minlength="321" maxlength="28411" location="image">
 #    <tre name="RSMDCB" minlength="269" maxlength="99985" location="image">
 #    <tre name="RSMECB" minlength="371" maxlength="98487" location="image">
-#     <tre name="RSMGGA" minlength="390" maxlength="99988" location="image">
 #    <tre name="RSMGIA" length="591" location="image">
+###############################################################################
+# Test parsing RSMGIA TRE (STDI-0002-1-v5.0 App U) Test data pulled from https://gwg.nga.mil/ntb/baseline/software/testfile/rsm/SampleFiles/FrameSet4/RSM_Core_Files/Case4_parsed.txt
+
+def test_nitf_RSMGIA():
+    tre_data = "TRE=HEX/RSMGIA=" + hex_string("2_8                                                                             ") + \
+        hex_string("1101222317-2                            -4.57525580681618E+02+3.00474775990796E+00+1.95410344636348E-02+2.76383510654281E-01") + \
+        hex_string("-2.89689759389688E-05+1.80737652185207E-05+1.20206833134656E-03+3.59002009200743E-07+3.87190897499437E-05+1.03001117662271E-03") + \
+        hex_string("-4.04620988883014E+02-2.95529663470716E-02+3.05989763029325E+00+1.53029610980831E-01+7.26094888489803E-07-3.07923126412452E-05") + \
+        hex_string("-5.23977992299835E-05+1.94465253510324E-05+1.29672867653766E-03+9.01546108508409E-04003001003+3.09733333333333E+03") + \
+        hex_string("+9.12200000000000E+03")
+
+    ds = gdal.GetDriverByName('NITF').Create('/vsimem/nitf_rsmgia.ntf', 1, 1, options=[tre_data])
+    ds = None
+
+    ds = gdal.Open('/vsimem/nitf_rsmgia.ntf')
+    data = ds.GetMetadata('xml:TRE')[0]
+    ds = None
+
+    gdal.GetDriverByName('NITF').Delete('/vsimem/nitf_rsmgia.ntf')
+
+    expected_data = """<tres>
+  <tre name="RSMGIA" location="image">
+    <field name="IID" value="2_8" />
+    <field name="EDITION" value="1101222317-2" />
+    <field name="GR0" value="-4.57525580681618E+02" />
+    <field name="GRX" value="+3.00474775990796E+00" />
+    <field name="GRY" value="+1.95410344636348E-02" />
+    <field name="GRZ" value="+2.76383510654281E-01" />
+    <field name="GRXX" value="-2.89689759389688E-05" />
+    <field name="GRXY" value="+1.80737652185207E-05" />
+    <field name="GRXZ" value="+1.20206833134656E-03" />
+    <field name="GRYY" value="+3.59002009200743E-07" />
+    <field name="GRYZ" value="+3.87190897499437E-05" />
+    <field name="GRZZ" value="+1.03001117662271E-03" />
+    <field name="GC0" value="-4.04620988883014E+02" />
+    <field name="GCX" value="-2.95529663470716E-02" />
+    <field name="GCY" value="+3.05989763029325E+00" />
+    <field name="GCZ" value="+1.53029610980831E-01" />
+    <field name="GCXX" value="+7.26094888489803E-07" />
+    <field name="GCXY" value="-3.07923126412452E-05" />
+    <field name="GCXZ" value="-5.23977992299835E-05" />
+    <field name="GCYY" value="+1.94465253510324E-05" />
+    <field name="GCYZ" value="+1.29672867653766E-03" />
+    <field name="GCZZ" value="+9.01546108508409E-04" />
+    <field name="GRNIS" value="003" />
+    <field name="GCNIS" value="001" />
+    <field name="GTNIS" value="003" />
+    <field name="GRSSIZ" value="+3.09733333333333E+03" />
+    <field name="GCSSIZ" value="+9.12200000000000E+03" />
+  </tre>
+</tres>
+"""
+    assert data == expected_data
+
+
 #    <tre name="RSMPCA" minlength="486" maxlength="18546" location="image">
 #    <tre name="RSMPIA" length="591" location="image">
   
