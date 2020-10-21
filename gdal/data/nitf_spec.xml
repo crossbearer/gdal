@@ -1569,7 +1569,7 @@
         <field name="TID" length="40" type="string"/>
         <!-- Cross-covariance block information-->
         <field name="NROWCB" length ="2" type="integer"/>
-        <!-- Number of images refernced by cross-covariance blocks-->
+        <!-- Number of images referenced by cross-covariance blocks-->
         <field name="NIMGE" length="3" type="integer" maxval="999"/>
         <loop counter="NIMGE" md_prefix="IMGE_%03d_">
             <field name="IID1" length="80" type="string"/>
@@ -1588,7 +1588,7 @@
             <field name="NOFFX" length="21" type="real"/> <!--meters or pixels-->
             <field name="NOFFY" length="21" type="real"/> <!--meters or pixels-->
             <field name="NOFFZ" length="21" type="real"/> <!--meters-->
-            <!--Local Recatnagular Ground Coordinates Detailed Definiton for Associated Image-->
+            <!--Local Rectangular Ground Coordinates Detailed Definiton for Associated Image-->
             <if cond="LOCTYP=R">
                 <field name="XUOL" length="21" type="real"/> <!--meters-->
                 <field name="YUOL" length="21" type="real"/> <!--meters-->
@@ -1637,8 +1637,10 @@
         </if>
         <!--Direct Error Covariance-->
         <loop counter="NIMGE" md_prefix="IMGE_%03d_">
-            <loop counter="NROWCB*NCOLCB" md_prefix="CB_%04_">
-                <field name="CRSCOV" length="21" type="real"/>
+            <loop counter="NCOLCB" md_prefix="COL_%02d_">
+                <loop counter="NROWCB" md_prefix="ROW_%02d_">
+                    <field name="CRSCOV" length="21" type="real"/>
+                </loop>
             </loop>
         </loop>
     </tre>
