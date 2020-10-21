@@ -3287,7 +3287,59 @@ def test_nitf_RSMAPA():
 """
     assert data == expected_data
 
-#    <tre name="RSMAPB" minlength="321" maxlength="28411" location="image">
+###############################################################################
+# Test parsing RSMAPB TRE (STDI-0002-1-v5.0 App U) 
+
+def test_nitf_RSMAPB():
+    tre_data = "TRE=HEX/RSMAPB=" + hex_string("2_8                                                                             ") + \
+        hex_string("1101217914-2                            1101222317-1                            01IG+9.99999999999999E+99") + \
+        hex_string("+9.99999999999999E+99+9.99999999999999E+99+9.99999999999999E+99+9.99999999999999E+99+9.99999999999999E+99") + \
+        hex_string("N01010000001OFFX+9.99999999999999E+99")
+
+    ds = gdal.GetDriverByName('NITF').Create('/vsimem/nitf_rsmapb.ntf', 1, 1, options=[tre_data])
+    ds = None
+
+    ds = gdal.Open('/vsimem/nitf_rsmapb.ntf')
+    data = ds.GetMetadata('xml:TRE')[0]
+    ds = None
+
+    gdal.GetDriverByName('NITF').Delete('/vsimem/nitf_rsmapb.ntf')
+
+    expected_data="""<tres>
+  <tre name="RSMAPB" location="image">
+    <field name="IID" value="2_8" />
+    <field name="EDITION" value="1101217914-2" />
+    <field name="TID" value="1101222317-1" />
+    <field name="NPAR" value="01" />
+    <field name="APTYP" value="I" />
+    <field name="LOCTYP" value="G" />
+    <field name="NSFX" value="+9.99999999999999E+99" />
+    <field name="NSFY" value="+9.99999999999999E+99" />
+    <field name="NSFZ" value="+9.99999999999999E+99" />
+    <field name="NOFFX" value="+9.99999999999999E+99" />
+    <field name="NOFFY" value="+9.99999999999999E+99" />
+    <field name="NOFFZ" value="+9.99999999999999E+99" />
+    <field name="APBASE" value="N" />
+    <field name="NISAP" value="01" />
+    <field name="NISAPR" value="01" />
+    <repeated number="1">
+      <group index="0">
+        <field name="XPWRR" value="0" />
+        <field name="YPWRR" value="0" />
+        <field name="ZPWRR" value="0" />
+      </group>
+    </repeated>
+    <field name="NISAPC" value="00" />
+    <repeated number="1">
+      <group index="0">
+        <field name="PARVAL" value="01OFFX+9.999999999999" />
+      </group>
+    </repeated>
+  </tre>
+</tres>
+"""
+
+    assert data == expected_data
 #    <tre name="RSMDCB" minlength="269" maxlength="99985" location="image">
 ###############################################################################
 # Test parsing RSMECB TRE (STDI-0002-1-v5.0 App U) 
