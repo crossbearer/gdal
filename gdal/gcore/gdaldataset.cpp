@@ -843,7 +843,7 @@ int CPL_STDCALL GDALGetRasterCount( GDALDatasetH hDS )
  * @return a pointer to an internal projection reference string.  It should
  * not be altered, freed or expected to last for long.
  *
- * @see http://www.gdal.org/osr_tutorial.html
+ * @see https://gdal.org/tutorials/osr_api_tut.html
  */
 
 const char *GDALDataset::GetProjectionRef() const
@@ -903,7 +903,7 @@ const char *GDALDataset::_GetProjectionRef() { return (""); }
  * Its lifetime will be the one of the dataset object, or until the next
  * call to this method.
  *
- * @see http://www.gdal.org/osr_tutorial.html
+ * @see https://gdal.org/tutorials/osr_api_tut.html
  */
 
 const OGRSpatialReference* GDALDataset::GetSpatialRef() const
@@ -916,7 +916,7 @@ const OGRSpatialReference* GDALDataset::GetSpatialRef() const
 /************************************************************************/
 
 /**
- * \brief Fetch the projection definition string for this dataset.
+ * \brief Fetch the spatial reference for this dataset.
  *
  * @since GDAL 3.0
  *
@@ -3329,6 +3329,13 @@ GDALDatasetH CPL_STDCALL GDALOpenEx( const char *pszFilename,
 
     oOpenInfo.papszOpenOptions = papszOpenOptionsCleaned;
 
+#ifdef OGRAPISPY_ENABLED
+    const bool bUpdate = (nOpenFlags & GDAL_OF_UPDATE) != 0;
+    const int iSnapshot = (nOpenFlags & GDAL_OF_VECTOR) != 0 &&
+                          (nOpenFlags & GDAL_OF_RASTER) == 0 ?
+        OGRAPISpyOpenTakeSnapshot(pszFilename, bUpdate) : INT_MIN;
+#endif
+
     const int nDriverCount = poDM->GetDriverCount();
     for( int iDriver = 0; iDriver < nDriverCount; ++iDriver )
     {
@@ -3499,6 +3506,16 @@ GDALDatasetH CPL_STDCALL GDALOpenEx( const char *pszFilename,
             VSIErrorReset();
 
             CSLDestroy(papszOpenOptionsCleaned);
+
+#ifdef OGRAPISPY_ENABLED
+            if( iSnapshot != INT_MIN )
+            {
+                GDALDatasetH hDS = GDALDataset::ToHandle(poDS);
+                OGRAPISpyOpen(pszFilename, bUpdate, iSnapshot, &hDS);
+                poDS = GDALDataset::FromHandle(hDS);
+            }
+#endif
+
             return poDS;
         }
 
@@ -3515,12 +3532,28 @@ GDALDatasetH CPL_STDCALL GDALOpenEx( const char *pszFilename,
         if( CPLGetLastErrorNo() != 0 && CPLGetLastErrorType() > CE_Warning)
         {
             CSLDestroy(papszOpenOptionsCleaned);
+
+#ifdef OGRAPISPY_ENABLED
+            if( iSnapshot != INT_MIN )
+            {
+                GDALDatasetH hDS = nullptr;
+                OGRAPISpyOpen(pszFilename, bUpdate, iSnapshot, &hDS);
+            }
+#endif
             return nullptr;
         }
 #endif
     }
 
     CSLDestroy(papszOpenOptionsCleaned);
+
+#ifdef OGRAPISPY_ENABLED
+    if( iSnapshot != INT_MIN )
+    {
+        GDALDatasetH hDS = nullptr;
+        OGRAPISpyOpen(pszFilename, bUpdate, iSnapshot, &hDS);
+    }
+#endif
 
     if( nOpenFlags & GDAL_OF_VERBOSE_ERROR )
     {
@@ -3626,6 +3659,11 @@ void CPL_STDCALL GDALClose( GDALDatasetH hDS )
     if( hDS == nullptr )
         return;
 
+#ifdef OGRAPISPY_ENABLED
+    if( bOGRAPISpyEnabled )
+        OGRAPISpyPreClose(hDS);
+#endif
+
     GDALDataset *poDS = GDALDataset::FromHandle(hDS);
 
     if (poDS->GetShared())
@@ -3639,6 +3677,12 @@ void CPL_STDCALL GDALClose( GDALDatasetH hDS )
             return;
 
         delete poDS;
+
+#ifdef OGRAPISPY_ENABLED
+        if( bOGRAPISpyEnabled )
+            OGRAPISpyPostClose();
+#endif
+
         return;
     }
 
@@ -3646,6 +3690,11 @@ void CPL_STDCALL GDALClose( GDALDatasetH hDS )
 /*      This is not shared dataset, so directly delete it.              */
 /* -------------------------------------------------------------------- */
     delete poDS;
+
+#ifdef OGRAPISPY_ENABLED
+    if( bOGRAPISpyEnabled )
+        OGRAPISpyPostClose();
+#endif
 }
 
 /************************************************************************/
@@ -4000,6 +4049,7 @@ int GDALDataset::CloseDependentDatasets()
 /*                            ReportError()                             */
 /************************************************************************/
 
+#ifndef DOXYGEN_XML
 /**
  * \brief Emits an error related to a dataset.
  *
@@ -4070,6 +4120,7 @@ void GDALDataset::ReportErrorV(const char* pszDSName,
         CPLErrorV(eErrClass, err_no, fmt, args);
     }
 }
+#endif
 
 /************************************************************************/
 /*                            GetMetadata()                             */
@@ -4227,6 +4278,11 @@ void GDALDatasetReleaseResultSet( GDALDatasetH hDS, OGRLayerH hLayer )
 {
     VALIDATE_POINTER0(hDS, "GDALDatasetReleaseResultSet");
 
+#ifdef OGRAPISPY_ENABLED
+    if( bOGRAPISpyEnabled )
+        OGRAPISpy_DS_ReleaseResultSet(hDS, hLayer);
+#endif
+
     GDALDataset::FromHandle(hDS)
         ->ReleaseResultSet(OGRLayer::FromHandle(hLayer));
 }
@@ -4250,6 +4306,11 @@ int GDALDatasetGetLayerCount( GDALDatasetH hDS )
 
 {
     VALIDATE_POINTER1(hDS, "GDALDatasetH", 0);
+
+#ifdef OGRAPISPY_ENABLED
+    if( bOGRAPISpyEnabled )
+        OGRAPISpy_DS_GetLayerCount(reinterpret_cast<GDALDatasetH>(hDS));
+#endif
 
     return GDALDataset::FromHandle(hDS)->GetLayerCount();
 }
@@ -4279,8 +4340,15 @@ OGRLayerH GDALDatasetGetLayer( GDALDatasetH hDS, int iLayer )
 {
     VALIDATE_POINTER1(hDS, "GDALDatasetGetLayer", nullptr);
 
-    return OGRLayer::ToHandle(
+    OGRLayerH hLayer = OGRLayer::ToHandle(
         GDALDataset::FromHandle(hDS)->GetLayer(iLayer));
+
+#ifdef OGRAPISPY_ENABLED
+    if( bOGRAPISpyEnabled )
+        OGRAPISpy_DS_GetLayer(hDS, iLayer, hLayer);
+#endif
+
+    return hLayer;
 }
 
 /************************************************************************/
@@ -4308,8 +4376,15 @@ OGRLayerH GDALDatasetGetLayerByName( GDALDatasetH hDS, const char *pszName )
 {
     VALIDATE_POINTER1(hDS, "GDALDatasetGetLayerByName", nullptr);
 
-    return OGRLayer::ToHandle(
+    OGRLayerH hLayer = OGRLayer::ToHandle(
         GDALDataset::FromHandle(hDS)->GetLayerByName(pszName));
+
+#ifdef OGRAPISPY_ENABLED
+    if( bOGRAPISpyEnabled )
+        OGRAPISpy_DS_GetLayerByName(hDS, pszName, hLayer);
+#endif
+
+    return hLayer;
 }
 
 /************************************************************************/
@@ -4509,10 +4584,17 @@ OGRLayerH GDALDatasetCreateLayer( GDALDatasetH hDS,
         return nullptr;
     }
 
-    return OGRLayer::ToHandle(
+    OGRLayerH hLayer = OGRLayer::ToHandle(
         GDALDataset::FromHandle(hDS)->CreateLayer(
             pszName, OGRSpatialReference::FromHandle(hSpatialRef),
             eGType, const_cast<char**>(papszOptions)));
+
+#ifdef OGRAPISPY_ENABLED
+    if( bOGRAPISpyEnabled )
+        OGRAPISpy_DS_CreateLayer(hDS, pszName, hSpatialRef, eGType, const_cast<char**>(papszOptions), hLayer);
+#endif
+
+    return hLayer;
 }
 
 /************************************************************************/
@@ -4591,7 +4673,7 @@ OGRLayerH GDALDatasetCopyLayer( GDALDatasetH hDS,
  dialect. Starting with OGR 1.10, the SQLITE dialect can also be used.
 
  @return an OGRLayer containing the results of the query.  Deallocate with
- ReleaseResultSet().
+ GDALDatasetReleaseResultSet().
 
 */
 
@@ -4603,10 +4685,17 @@ OGRLayerH GDALDatasetExecuteSQL( GDALDatasetH hDS,
 {
     VALIDATE_POINTER1(hDS, "GDALDatasetExecuteSQL", nullptr);
 
-    return OGRLayer::ToHandle(
+    OGRLayerH hLayer = OGRLayer::ToHandle(
         GDALDataset::FromHandle(hDS)->ExecuteSQL(
             pszStatement, OGRGeometry::FromHandle(hSpatialFilter),
             pszDialect));
+
+#ifdef OGRAPISPY_ENABLED
+    if( bOGRAPISpyEnabled )
+        OGRAPISpy_DS_ExecuteSQL(hDS, pszStatement, hSpatialFilter, pszDialect, hLayer);
+#endif
+
+    return hLayer;
 }
 
 
