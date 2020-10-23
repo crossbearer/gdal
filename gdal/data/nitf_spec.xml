@@ -1563,7 +1563,7 @@
         </loop>
     </tre>
 
-    <tre name="RSMDCB" minlength="269" maxlength="99985" location="image">
+    <tre name="RSMDCB" minlength="269" maxlength="99985" location="image" md_prefix="NITF_RSMDCB_">
         <field name="IID" length="80" type="string"/>
         <field name="EDITION" length="40" type="string"/>
         <field name="TID" length="40" type="string"/>
@@ -1637,10 +1637,8 @@
         </if>
         <!--Direct Error Covariance-->
         <loop counter="NIMGE" md_prefix="IMGE_%03d_">
-            <loop counter="NCOLCB" md_prefix="COL_%02d_">
-                <loop counter="NROWCB" md_prefix="ROW_%02d_">
-                    <field name="CRSCOV" length="21" type="real"/>
-                </loop>
+            <loop counter="NROWCB*NCOLCB" md_prefix="CB_%02d_">
+                <field name="CRSCOV" length="21" type="real"/>
             </loop>
         </loop>
     </tre>
