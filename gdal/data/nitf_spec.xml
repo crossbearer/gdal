@@ -1745,7 +1745,7 @@
         <if cond="INCLIC=Y">
             <field name="NPARO" length="2" type="integer" minval="01" maxval="53"/>
             <field name="IGN" length="2" type="integer" minval="01" maxval="36"/>
-            <field name="CVDATE" length="8" type="ineger"/>
+            <field name="CVDATE" length="8" type="integer"/>
             <!-- RSM ADjustable Identification of the associated image-->
             <field name="NPAR" length="2" type="integer" minval="01" maxval="36"/>
             <field name="APTYP" length="1" type="string"/>
@@ -1809,7 +1809,7 @@
                 <loop counter="0.5*(NUMOPG+1)*NUMOPG" md_prefix="OPG_%04d_">
                     <field name="ERRCVG" length="21" type="real"/>
                 </loop>
-                <field name="TCDF" legth="1" type="integer" minval="0" maxval="2"/>
+                <field name="TCDF" length="1" type="integer" minval="0" maxval="2"/>
                 <field name="ACSMC" length="1" type="string"/>
                 <if cond="ACSMC=N">
                     <field name="NCSEG" length="1" minval="2" maxval="9" type="integer"/>
