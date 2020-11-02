@@ -3809,9 +3809,9 @@ def test_nitf_RSMPCA():
 """
     assert data == expected_data
 ###############################################################################
-# Test parsing RSMPCA TRE (STDI-0002-1-v5.0 App U) Test data pulled from https://gwg.nga.mil/ntb/baseline/software/testfile/rsm/SampleFiles/FrameSet5/RSM_Core_Files/Case5_parsed.txt
+# Test parsing RSMPIA TRE (STDI-0002-1-v5.0 App U) Test data pulled from https://gwg.nga.mil/ntb/baseline/software/testfile/rsm/SampleFiles/FrameSet5/RSM_Core_Files/Case5_parsed.txt
 
-def test_nitf_RSMPCA():
+def test_nitf_RSMPIA():
 
     tre_data = "TRE=HEX/RSMPIA=" + hex_string("2_8                                                                             ") + \
         hex_string("1101217914-2                            -1.37241587646741E+10+6.80345003035694E+09-2.53961725272867E+09") + \
